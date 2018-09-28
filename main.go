@@ -13,6 +13,7 @@ type flagError string
 
 var shouldUnpack bool
 var shouldRepack bool
+var input string
 
 func init() {
 	const (
@@ -32,6 +33,16 @@ func init() {
 	flag.BoolVar(&shouldRepack, "r", false, shorthandDesc(flagName))
 }
 
+func init() {
+	const (
+		usage = "the input .bnk for unpacking or the directory to read .wem" +
+			"files from for repacking"
+		flagName = "input"
+	)
+	flag.StringVar(&input, flagName, "", usage)
+	flag.StringVar(&input, "i", "", shorthandDesc(flagName))
+}
+
 func shorthandDesc(flagName string) string {
 	return "(shorthand for -" + flagName + ")"
 }
@@ -43,6 +54,8 @@ func verifyFlags() {
 		err = "Either unpack or repack should be specified"
 	case shouldUnpack && shouldRepack:
 		err = "Both unpack and repack cannot be specified"
+	case input == "":
+		err = "input cannot be empty"
 	}
 
 	if err != "" {
