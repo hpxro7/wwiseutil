@@ -9,6 +9,8 @@ const (
 	shorthandSuffix = " (shorthand)"
 )
 
+type flagError string
+
 var shouldUnpack bool
 var shouldRepack bool
 
@@ -35,11 +37,17 @@ func shorthandDesc(flagName string) string {
 }
 
 func verifyFlags() {
-	if !(shouldUnpack || shouldRepack) {
-		log.Fatal("Either unpack or repack should be specified")
+	var err flagError
+	switch {
+	case !(shouldUnpack || shouldRepack):
+		err = "Either unpack or repack should be specified"
+	case shouldUnpack && shouldRepack:
+		err = "Both unpack and repack cannot be specified"
 	}
-	if shouldUnpack && shouldRepack {
-		log.Fatal("Both unpack and repack cannot be specified")
+
+	if err != "" {
+		flag.Usage()
+		log.Fatal(err)
 	}
 }
 
