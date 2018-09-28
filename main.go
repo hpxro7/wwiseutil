@@ -2,6 +2,8 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"github.com/hpxro7/bnkutil/bnk"
 	"log"
 )
 
@@ -64,7 +66,22 @@ func verifyFlags() {
 	}
 }
 
+func unpack() {
+	file, err := bnk.Open(input)
+	if err != nil {
+		log.Fatalln("Could not parse .bnk file:\n", err)
+	}
+	fmt.Println(file)
+}
+
 func main() {
 	flag.Parse()
 	verifyFlags()
+
+	switch {
+	case shouldUnpack:
+		unpack()
+	case shouldRepack:
+		log.Fatal("Repack is currently unimplemented")
+	}
 }
