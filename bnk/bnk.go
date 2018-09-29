@@ -17,10 +17,14 @@ const DIDX_ENTRY_BYTES = 12
 // The identifier for the start of the DIDX (Data Index) section.
 var didxHeaderId = [4]byte{'D', 'I', 'D', 'X'}
 
+// The identifier for the start of the DATA section.
+var dataHeaderId = [4]byte{'D', 'A', 'T', 'A'}
+
 // A File represents an open Wwise SoundBank.
 type File struct {
 	closer       io.Closer
 	IndexSection *DataIndexSection
+	DataSection  *DataSection
 	Sections     []*SectionHeader
 }
 
@@ -31,6 +35,18 @@ type DataIndexSection struct {
 	WemCount uint32
 	// A mapping from wem ID to its descriptor.
 	DataMap map[uint32]WemDescriptor
+}
+
+// A DataIndexSection represents the DATA section of a SoundBank file.
+type DataSection struct {
+	Header *SectionHeader
+	Wems   []*Wem
+}
+
+// A Wem represents a single sound entity contained within a SoundBank file.
+type Wem struct {
+	io.ReaderAt
+	sr *io.SectionReader
 }
 
 // A WemDescriptor represents the location of a single wem entity within the
@@ -72,6 +88,12 @@ func NewFile(r io.ReaderAt) (*File, error) {
 				return nil, err
 			}
 			bnk.IndexSection = sec
+		case dataHeaderId:
+			sec, err := hdr.NewDataSection(sr, bnk.IndexSection)
+			if err != nil {
+				return nil, err
+			}
+			bnk.DataSection = sec
 		default:
 			bnk.Sections = append(bnk.Sections, hdr)
 			sr.Seek(int64(hdr.Length), io.SeekCurrent)
@@ -124,7 +146,9 @@ func (bnk *File) String() string {
 		total += desc.Length
 	}
 	fmt.Fprintln(b, "]")
-	fmt.Fprintf(b, "DIDX WEM total size: %d", total)
+	fmt.Fprintf(b, "DIDX WEM total size: %d\n", total)
+	data := bnk.DataSection
+	fmt.Fprintf(b, "%s: len(%d)", data.Header.Identifier, data.Header.Length)
 	return b.String()
 }
 
@@ -151,5 +175,31 @@ func (hdr *SectionHeader) NewDataIndexSection(r io.Reader) (*DataIndexSection, e
 		sec.DataMap[wemId] = desc
 	}
 
+	return &sec, nil
+}
+
+// NewDataSection creates a new DataSection, reading from sr, which must be
+// seeked to the start of the DATA section data. idx specifies how each wem
+// should be indexed from, given the current sr offset.
+// It is an error to call this method on a non-DATA header.
+func (hdr *SectionHeader) NewDataSection(sr *io.SectionReader,
+	idx *DataIndexSection) (*DataSection, error) {
+	if hdr.Identifier != dataHeaderId {
+		panic(fmt.Sprintf("Expected DATA header but got: %s", hdr.Identifier))
+	}
+	dataOffset, err := sr.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return nil, err
+	}
+	sec := DataSection{hdr, make([]*Wem, 0)}
+	for _, desc := range idx.DataMap {
+		wemStartOffset := dataOffset + int64(desc.Offset)
+		wemEndOffset := wemStartOffset + int64(desc.Length)
+		wemReader := io.NewSectionReader(sr, wemStartOffset, wemEndOffset)
+		wem := Wem{wemReader, wemReader}
+		sec.Wems = append(sec.Wems, &wem)
+	}
+
+	sr.Seek(int64(hdr.Length), io.SeekCurrent)
 	return &sec, nil
 }
