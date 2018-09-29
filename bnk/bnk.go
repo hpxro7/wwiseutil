@@ -25,7 +25,7 @@ type File struct {
 	closer       io.Closer
 	IndexSection *DataIndexSection
 	DataSection  *DataSection
-	Sections     []*SectionHeader
+	Others       []*SectionHeader
 }
 
 // A DataIndexSection represents the DIDX section of a SoundBank file.
@@ -45,7 +45,7 @@ type DataSection struct {
 
 // A Wem represents a single sound entity contained within a SoundBank file.
 type Wem struct {
-	io.ReaderAt
+	io.Reader
 	sr *io.SectionReader
 }
 
@@ -95,7 +95,7 @@ func NewFile(r io.ReaderAt) (*File, error) {
 			}
 			bnk.DataSection = sec
 		default:
-			bnk.Sections = append(bnk.Sections, hdr)
+			bnk.Others = append(bnk.Others, hdr)
 			sr.Seek(int64(hdr.Length), io.SeekCurrent)
 		}
 	}
@@ -133,7 +133,7 @@ func (bnk *File) Close() error {
 
 func (bnk *File) String() string {
 	b := new(strings.Builder)
-	for _, sec := range bnk.Sections {
+	for _, sec := range bnk.Others {
 		fmt.Fprintf(b, "%s: len(%d)\n", sec.Identifier, sec.Length)
 	}
 	idx := bnk.IndexSection
@@ -167,6 +167,10 @@ func (hdr *SectionHeader) NewDataIndexSection(r io.Reader) (*DataIndexSection, e
 		if err != nil {
 			return nil, err
 		}
+		if _, ok := sec.DataMap[wemId]; ok {
+			panic(fmt.Sprintf("%d is an illegal repeated wem ID in the DIDX", wemId))
+		}
+
 		var desc WemDescriptor
 		err = binary.Read(r, binary.LittleEndian, &desc)
 		if err != nil {

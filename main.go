@@ -4,7 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"github.com/hpxro7/bnkutil/bnk"
+	"io"
 	"log"
+	"os"
 )
 
 const (
@@ -16,6 +18,7 @@ type flagError string
 var shouldUnpack bool
 var shouldRepack bool
 var input string
+var output string
 
 func init() {
 	const (
@@ -45,6 +48,16 @@ func init() {
 	flag.StringVar(&input, "i", "", shorthandDesc(flagName))
 }
 
+func init() {
+	const (
+		usage = "The directory to output .wem files for unpacking or the" +
+			"directory to output the combined .bnk file for repacking."
+		flagName = "output"
+	)
+	flag.StringVar(&output, flagName, "", usage)
+	flag.StringVar(&output, "o", "", shorthandDesc(flagName))
+}
+
 func shorthandDesc(flagName string) string {
 	return "(shorthand for -" + flagName + ")"
 }
@@ -58,6 +71,8 @@ func verifyFlags() {
 		err = "Both unpack and repack cannot be specified"
 	case input == "":
 		err = "input cannot be empty"
+	case output == "":
+		err = "output cannot be empty"
 	}
 
 	if err != "" {
@@ -67,11 +82,26 @@ func verifyFlags() {
 }
 
 func unpack() {
-	file, err := bnk.Open(input)
+	bnk, err := bnk.Open(input)
+	defer bnk.Close()
 	if err != nil {
 		log.Fatalln("Could not parse .bnk file:\n", err)
 	}
-	fmt.Println(file)
+	fmt.Println(bnk)
+
+	err = createDirIfEmpty(output)
+	if err != nil {
+		log.Fatalln("Could not create output directory:", err)
+	}
+	f, err := os.Create(output + "out.wem")
+	io.Copy(f, bnk.DataSection.Wems[0])
+}
+
+func createDirIfEmpty(path string) error {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return os.Mkdir(output, os.ModePerm)
+	}
+	return nil
 }
 
 func main() {
