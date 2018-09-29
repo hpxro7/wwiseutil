@@ -33,8 +33,10 @@ type DataIndexSection struct {
 	Header *SectionHeader
 	// The count of wems in this SoundBank.
 	WemCount uint32
+	// A list of all wem IDs, in order of their offset into the file.
+	WemIds []uint32
 	// A mapping from wem ID to its descriptor.
-	DataMap map[uint32]WemDescriptor
+	DescriptorMap map[uint32]WemDescriptor
 }
 
 // A DataIndexSection represents the DATA section of a SoundBank file.
@@ -141,7 +143,7 @@ func (bnk *File) String() string {
 	fmt.Fprintf(b, "WEM count: %d\n", idx.WemCount)
 	fmt.Fprintf(b, "WEM IDs: [")
 	total := uint32(0)
-	for wemId, desc := range idx.DataMap {
+	for wemId, desc := range idx.DescriptorMap {
 		fmt.Fprintf(b, "%d,", wemId)
 		total += desc.Length
 	}
@@ -160,23 +162,25 @@ func (hdr *SectionHeader) NewDataIndexSection(r io.Reader) (*DataIndexSection, e
 		panic(fmt.Sprintf("Expected DIDX header but got: %s", hdr.Identifier))
 	}
 	wemCount := hdr.Length / DIDX_ENTRY_BYTES
-	sec := DataIndexSection{hdr, wemCount, make(map[uint32]WemDescriptor)}
+	sec := DataIndexSection{hdr, wemCount, make([]uint32, wemCount),
+		make(map[uint32]WemDescriptor)}
 	for i := uint32(0); i < wemCount; i++ {
 		var wemId uint32
 		err := binary.Read(r, binary.LittleEndian, &wemId)
 		if err != nil {
 			return nil, err
 		}
-		if _, ok := sec.DataMap[wemId]; ok {
+		if _, ok := sec.DescriptorMap[wemId]; ok {
 			panic(fmt.Sprintf("%d is an illegal repeated wem ID in the DIDX", wemId))
 		}
+		sec.WemIds = append(sec.WemIds, wemId)
 
 		var desc WemDescriptor
 		err = binary.Read(r, binary.LittleEndian, &desc)
 		if err != nil {
 			return nil, err
 		}
-		sec.DataMap[wemId] = desc
+		sec.DescriptorMap[wemId] = desc
 	}
 
 	return &sec, nil
@@ -196,7 +200,7 @@ func (hdr *SectionHeader) NewDataSection(sr *io.SectionReader,
 		return nil, err
 	}
 	sec := DataSection{hdr, make([]*Wem, 0)}
-	for _, desc := range idx.DataMap {
+	for _, desc := range idx.DescriptorMap {
 		wemStartOffset := dataOffset + int64(desc.Offset)
 		wemEndOffset := wemStartOffset + int64(desc.Length)
 		wemReader := io.NewSectionReader(sr, wemStartOffset, wemEndOffset)
