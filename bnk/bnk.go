@@ -138,6 +138,7 @@ func (bnk *File) String() string {
 	for _, sec := range bnk.Others {
 		fmt.Fprintf(b, "%s: len(%d)\n", sec.Identifier, sec.Length)
 	}
+	// TODO: Turn these into String() for each type.
 	idx := bnk.IndexSection
 	fmt.Fprintf(b, "%s: len(%d)\n", idx.Header.Identifier, idx.Header.Length)
 	fmt.Fprintf(b, "WEM count: %d\n", idx.WemCount)
@@ -162,7 +163,7 @@ func (hdr *SectionHeader) NewDataIndexSection(r io.Reader) (*DataIndexSection, e
 		panic(fmt.Sprintf("Expected DIDX header but got: %s", hdr.Identifier))
 	}
 	wemCount := hdr.Length / DIDX_ENTRY_BYTES
-	sec := DataIndexSection{hdr, wemCount, make([]uint32, wemCount),
+	sec := DataIndexSection{hdr, wemCount, make([]uint32, 0),
 		make(map[uint32]WemDescriptor)}
 	for i := uint32(0); i < wemCount; i++ {
 		var wemId uint32
@@ -200,10 +201,10 @@ func (hdr *SectionHeader) NewDataSection(sr *io.SectionReader,
 		return nil, err
 	}
 	sec := DataSection{hdr, make([]*Wem, 0)}
-	for _, desc := range idx.DescriptorMap {
+	for _, id := range idx.WemIds {
+		desc := idx.DescriptorMap[id]
 		wemStartOffset := dataOffset + int64(desc.Offset)
-		wemEndOffset := wemStartOffset + int64(desc.Length)
-		wemReader := io.NewSectionReader(sr, wemStartOffset, wemEndOffset)
+		wemReader := io.NewSectionReader(sr, wemStartOffset, int64(desc.Length))
 		wem := Wem{wemReader, wemReader}
 		sec.Wems = append(sec.Wems, &wem)
 	}

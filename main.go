@@ -1,17 +1,19 @@
 package main
 
 import (
+	"filepath"
 	"flag"
 	"fmt"
-	"github.com/hpxro7/bnkutil/bnk"
 	"io"
 	"log"
 	"os"
 )
 
-const (
-	shorthandSuffix = " (shorthand)"
+import (
+	"github.com/hpxro7/bnkutil/bnk"
 )
+
+const shorthandSuffix = " (shorthand)"
 
 type flagError string
 
@@ -93,8 +95,20 @@ func unpack() {
 	if err != nil {
 		log.Fatalln("Could not create output directory:", err)
 	}
-	f, err := os.Create(output + "out.wem")
-	io.Copy(f, bnk.DataSection.Wems[0])
+	total := int64(0)
+	for i, wem := range bnk.DataSection.Wems {
+		filename := fmt.Sprintf("%03d.wem", i+1)
+		f, err := os.Create(filepath.Join(output, filename))
+		if err != nil {
+			log.Fatalf("Could not create wem file \"%s\": %s", filename, err)
+		}
+		n, err := io.Copy(f, wem)
+		if err != nil {
+			log.Fatalf("Could not write wem file \"%s\": %s", filename, err)
+		}
+		total += n
+	}
+	fmt.Println("Total bytes written: ", total)
 }
 
 func createDirIfEmpty(path string) error {
