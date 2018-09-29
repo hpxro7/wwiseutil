@@ -26,9 +26,11 @@ type File struct {
 
 // A DataIndexSection represents the DIDX section of a SoundBank file.
 type DataIndexSection struct {
-	Header   *SectionHeader
+	Header *SectionHeader
+	// The count of wems in this SoundBank.
 	WemCount uint32
-	DataMap  map[uint32]WemDescriptor
+	// A mapping from wem ID to its descriptor.
+	DataMap map[uint32]WemDescriptor
 }
 
 // A WemDescriptor represents the location of a single wem entity within the
