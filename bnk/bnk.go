@@ -81,8 +81,13 @@ type DataSection struct {
 // A Wem represents a single sound entity contained within a SoundBank file.
 type Wem struct {
 	io.Reader
-	Descriptor      WemDescriptor
+	Descriptor WemDescriptor
+	// A reader over the bytes that remain until the next wem if there is one, or
+	// the end of the data section. These bytes are generally NUL(0x00) padding.
 	RemainingReader io.Reader
+	// The number of bytes remaining until the next wem if there is one, or the
+	// end of the data section.
+	RemainingLength int64
 }
 
 // A WemDescriptor represents the location of a single wem entity within the
@@ -330,6 +335,7 @@ func (hdr *SectionHeader) NewDataSection(sr *io.SectionReader,
 		wemReader := io.NewSectionReader(sr, wemStartOffset, int64(desc.Length))
 
 		var remReader io.Reader
+		remaining := int64(0)
 
 		if i <= len(idx.WemIds)-1 {
 			wemEndOffset := wemStartOffset + int64(desc.Length)
@@ -344,13 +350,13 @@ func (hdr *SectionHeader) NewDataSection(sr *io.SectionReader,
 				nextDesc := idx.DescriptorMap[idx.WemIds[i+1]]
 				nextOffset = dataOffset + int64(nextDesc.Offset)
 			}
-			remaining := nextOffset - wemEndOffset
-			if remaining > 0 {
-				remReader = io.NewSectionReader(sr, wemEndOffset, remaining)
-			}
+			remaining = nextOffset - wemEndOffset
+			// Pass a Reader over the remaining section if we have remaining bytes to
+			// read, or an empty Reader if remaining is 0 (no bytes will be read).
+			remReader = io.NewSectionReader(sr, wemEndOffset, remaining)
 		}
 
-		wem := Wem{wemReader, desc, remReader}
+		wem := Wem{wemReader, desc, remReader, remaining}
 		sec.Wems = append(sec.Wems, &wem)
 	}
 
