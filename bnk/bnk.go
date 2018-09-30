@@ -14,7 +14,7 @@ import (
 const SECTION_HEADER_BYTES = 8
 
 // The number of bytes used to describe the known portion of a BKHD section,
-// including its own header.
+// excluding its own header.
 const BKHD_SECTION_BYTES = 8
 
 // The number of bytes used to describe a single data index entry
@@ -151,23 +151,8 @@ func NewFile(r io.ReaderAt) (*File, error) {
 
 // Write writes the full contents of this File to the Writer specified by w.
 func (bnk *File) WriteTo(w io.Writer) (written int64, err error) {
-	hdr := bnk.BankHeaderSection
-	err = binary.Write(w, binary.LittleEndian, hdr.Header)
-	if err != nil {
-		return
-	}
-	written = int64(SECTION_HEADER_BYTES)
-	err = binary.Write(w, binary.LittleEndian, hdr.Descriptor)
-	if err != nil {
-		return
-	}
-	written = int64(BKHD_SECTION_BYTES)
-	n, err := io.Copy(w, hdr.RemainingReader)
-	if err != nil {
-		return
-	}
-	written += int64(n)
-	return written, nil
+	written, err = bnk.BankHeaderSection.WriteTo(w)
+	return written, err
 }
 
 // Open opens the File at the specified path using os.Open and prepares it for
@@ -247,6 +232,25 @@ func (hdr *SectionHeader) NewBankHeaderSection(sr *io.SectionReader) (*BankHeade
 	sr.Seek(remaining, io.SeekCurrent)
 
 	return sec, nil
+}
+
+func (hdr *BankHeaderSection) WriteTo(w io.Writer) (written int64, err error) {
+	err = binary.Write(w, binary.LittleEndian, hdr.Header)
+	if err != nil {
+		return
+	}
+	written = int64(SECTION_HEADER_BYTES)
+	err = binary.Write(w, binary.LittleEndian, hdr.Descriptor)
+	if err != nil {
+		return
+	}
+	written += int64(BKHD_SECTION_BYTES)
+	n, err := io.Copy(w, hdr.RemainingReader)
+	if err != nil {
+		return
+	}
+	written += int64(n)
+	return written, nil
 }
 
 // NewDataIndexSection creates a new DataIndexSection, reading from r, which must
