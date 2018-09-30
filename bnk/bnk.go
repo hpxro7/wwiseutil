@@ -166,6 +166,11 @@ func (bnk *File) WriteTo(w io.Writer) (written int64, err error) {
 		return
 	}
 	written += n
+	n, err = bnk.DataSection.WriteTo(w)
+	if err != nil {
+		return
+	}
+	written += n
 	return written, err
 }
 
@@ -362,6 +367,30 @@ func (hdr *SectionHeader) NewDataSection(sr *io.SectionReader,
 
 	sr.Seek(int64(hdr.Length), io.SeekCurrent)
 	return &sec, nil
+}
+
+// WriteTo writes the full contents of this DataSection to the Writer specified
+// by w.
+func (data *DataSection) WriteTo(w io.Writer) (written int64, err error) {
+	err = binary.Write(w, binary.LittleEndian, data.Header)
+	if err != nil {
+		return
+	}
+	written = int64(SECTION_HEADER_BYTES)
+	for _, wem := range data.Wems {
+		n, err := io.Copy(w, wem)
+		if err != nil {
+			return written, err
+		}
+		written += int64(n)
+		n, err = io.Copy(w, wem.RemainingReader)
+		if err != nil {
+			return written, err
+		}
+		written += int64(n)
+	}
+
+	return written, nil
 }
 
 // NewUnknownSection creates a new UnknownSection, reading from sr, which
