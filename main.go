@@ -19,7 +19,7 @@ type flagError string
 
 var shouldUnpack bool
 var shouldRepack bool
-var input string
+var bnkPath string
 var output string
 
 func init() {
@@ -42,12 +42,13 @@ func init() {
 
 func init() {
 	const (
-		usage = "the input .bnk for unpacking or the directory to read .wem" +
-			"files from for repacking"
-		flagName = "input"
+		usage = "the path to the target .bnk. When unpack is used, this is the " +
+			"bnk file to unpack. When repack is used, this is the template bnk " +
+			"used; wem files will be replaced using this bnk."
+		flagName = "bnkpath"
 	)
-	flag.StringVar(&input, flagName, "", usage)
-	flag.StringVar(&input, "i", "", shorthandDesc(flagName))
+	flag.StringVar(&bnkPath, flagName, "", usage)
+	flag.StringVar(&bnkPath, "b", "", shorthandDesc(flagName))
 }
 
 func init() {
@@ -71,8 +72,8 @@ func verifyFlags() {
 		err = "Either unpack or repack should be specified"
 	case shouldUnpack && shouldRepack:
 		err = "Both unpack and repack cannot be specified"
-	case input == "":
-		err = "input cannot be empty"
+	case bnkPath == "":
+		err = "bnkpath cannot be empty"
 	case output == "":
 		err = "output cannot be empty"
 	}
@@ -84,7 +85,7 @@ func verifyFlags() {
 }
 
 func unpack() {
-	bnk, err := bnk.Open(input)
+	bnk, err := bnk.Open(bnkPath)
 	defer bnk.Close()
 	if err != nil {
 		log.Fatalln("Could not parse .bnk file:\n", err)
