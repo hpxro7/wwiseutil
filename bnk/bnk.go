@@ -146,6 +146,17 @@ func NewFile(r io.ReaderAt) (*File, error) {
 	return bnk, nil
 }
 
+// Write writes the full contents of this File to the Writer specified by w.
+func (bnk *File) Write(w io.Writer) error {
+	hdr := bnk.BankHeaderSection
+	err := binary.Write(w, binary.LittleEndian, hdr.Header)
+	if err != nil {
+		return err
+	}
+	io.Copy(w, hdr.RemainingReader)
+	return nil
+}
+
 // Open opens the File at the specified path using os.Open and prepares it for
 // use as a Wwise SoundBank file.
 func Open(path string) (*File, error) {
