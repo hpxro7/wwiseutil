@@ -10,9 +10,16 @@ import (
 	"strings"
 )
 
+// The number of bytes used to describe the known portion of a BKHD section,
+// including its own header.
+const BKHD_SECTION_BYTES = 8
+
 // The number of bytes used to describe a single data index entry
 // within the DIDX section.
 const DIDX_ENTRY_BYTES = 12
+
+// The identifier for the start of the BKHD (Bank Header) section.
+var bkhdHeaderId = [4]byte{'B', 'K', 'H', 'D'}
 
 // The identifier for the start of the DIDX (Data Index) section.
 var didxHeaderId = [4]byte{'D', 'I', 'D', 'X'}
@@ -22,10 +29,22 @@ var dataHeaderId = [4]byte{'D', 'A', 'T', 'A'}
 
 // A File represents an open Wwise SoundBank.
 type File struct {
-	closer       io.Closer
-	IndexSection *DataIndexSection
-	DataSection  *DataSection
-	Others       []*SectionHeader
+	closer            io.Closer
+	BankHeaderSection *BankHeaderSection
+	IndexSection      *DataIndexSection
+	DataSection       *DataSection
+	Others            []*SectionHeader
+}
+
+// A BankHeaderSection represents the BKHD section of a SoundBank file.
+type BankHeaderSection struct {
+	Header     *SectionHeader
+	Descriptor BankDescriptor
+}
+
+type BankDescriptor struct {
+	Version uint32
+	BankId  uint32
 }
 
 // A DataIndexSection represents the DIDX section of a SoundBank file.
@@ -88,6 +107,12 @@ func NewFile(r io.ReaderAt) (*File, error) {
 		}
 
 		switch id := hdr.Identifier; id {
+		case bkhdHeaderId:
+			sec, err := hdr.NewBankHeaderSection(sr)
+			if err != nil {
+				return nil, err
+			}
+			bnk.BankHeaderSection = sec
 		case didxHeaderId:
 			sec, err := hdr.NewDataIndexSection(sr)
 			if err != nil {
@@ -139,21 +164,49 @@ func (bnk *File) Close() error {
 
 func (bnk *File) String() string {
 	b := new(strings.Builder)
-	for _, sec := range bnk.Others {
-		fmt.Fprintf(b, "%s: len(%d)\n", sec.Identifier, sec.Length)
-	}
+
 	// TODO: Turn these into String() for each type.
+	hdr := bnk.BankHeaderSection
+	fmt.Fprintf(b, "%s: len(%d) version(%d) id(%d)\n", hdr.Header.Identifier,
+		hdr.Header.Length, hdr.Descriptor.Version, hdr.Descriptor.BankId)
+
 	idx := bnk.IndexSection
-	fmt.Fprintf(b, "%s: len(%d)\n", idx.Header.Identifier, idx.Header.Length)
-	fmt.Fprintf(b, "WEM count: %d\n", idx.WemCount)
 	total := uint32(0)
 	for _, desc := range idx.DescriptorMap {
 		total += desc.Length
 	}
+	fmt.Fprintf(b, "%s: len(%d) wem_count(%d)\n", idx.Header.Identifier,
+		idx.Header.Length, idx.WemCount)
 	fmt.Fprintf(b, "DIDX WEM total size: %d\n", total)
+
 	data := bnk.DataSection
-	fmt.Fprintf(b, "%s: len(%d)", data.Header.Identifier, data.Header.Length)
+	fmt.Fprintf(b, "%s: len(%d)\n", data.Header.Identifier, data.Header.Length)
+
+	for _, sec := range bnk.Others {
+		fmt.Fprintf(b, "%s: len(%d)\n", sec.Identifier, sec.Length)
+	}
+
 	return b.String()
+}
+
+// NewBankHeaderSection creates a new BankHeaderSection, reading from sr, which
+// must be seeked to the start of the BKHD section data.
+// It is an error to call this method on a non-BKHD header.
+func (hdr *SectionHeader) NewBankHeaderSection(sr *io.SectionReader) (*BankHeaderSection, error) {
+	if hdr.Identifier != bkhdHeaderId {
+		panic(fmt.Sprintf("Expected BKHD header but got: %s", hdr.Identifier))
+	}
+	sec := new(BankHeaderSection)
+	sec.Header = hdr
+	desc := BankDescriptor{}
+	err := binary.Read(sr, binary.LittleEndian, &desc)
+	if err != nil {
+		return nil, err
+	}
+	sec.Descriptor = desc
+	sr.Seek(int64(hdr.Length-BKHD_SECTION_BYTES), io.SeekCurrent)
+
+	return sec, nil
 }
 
 // NewDataIndexSection creates a new DataIndexSection, reading from r, which must
