@@ -1,12 +1,12 @@
 package main
 
 import (
-	"filepath"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 )
 
 import (

@@ -42,13 +42,17 @@ type DataIndexSection struct {
 // A DataIndexSection represents the DATA section of a SoundBank file.
 type DataSection struct {
 	Header *SectionHeader
-	Wems   []*Wem
+	// The offset into the file where the data portion of the DATA section begins.
+	// This is the location where wem entries are stored.
+	DataStart uint32
+	Wems      []*Wem
 }
 
 // A Wem represents a single sound entity contained within a SoundBank file.
 type Wem struct {
 	io.Reader
-	sr *io.SectionReader
+	sr         *io.SectionReader
+	Descriptor WemDescriptor
 }
 
 // A WemDescriptor represents the location of a single wem entity within the
@@ -142,13 +146,10 @@ func (bnk *File) String() string {
 	idx := bnk.IndexSection
 	fmt.Fprintf(b, "%s: len(%d)\n", idx.Header.Identifier, idx.Header.Length)
 	fmt.Fprintf(b, "WEM count: %d\n", idx.WemCount)
-	fmt.Fprintf(b, "WEM IDs: [")
 	total := uint32(0)
-	for wemId, desc := range idx.DescriptorMap {
-		fmt.Fprintf(b, "%d,", wemId)
+	for _, desc := range idx.DescriptorMap {
 		total += desc.Length
 	}
-	fmt.Fprintln(b, "]")
 	fmt.Fprintf(b, "DIDX WEM total size: %d\n", total)
 	data := bnk.DataSection
 	fmt.Fprintf(b, "%s: len(%d)", data.Header.Identifier, data.Header.Length)
@@ -200,12 +201,12 @@ func (hdr *SectionHeader) NewDataSection(sr *io.SectionReader,
 	if err != nil {
 		return nil, err
 	}
-	sec := DataSection{hdr, make([]*Wem, 0)}
+	sec := DataSection{hdr, uint32(dataOffset), make([]*Wem, 0)}
 	for _, id := range idx.WemIds {
 		desc := idx.DescriptorMap[id]
 		wemStartOffset := dataOffset + int64(desc.Offset)
 		wemReader := io.NewSectionReader(sr, wemStartOffset, int64(desc.Length))
-		wem := Wem{wemReader, wemReader}
+		wem := Wem{wemReader, wemReader, desc}
 		sec.Wems = append(sec.Wems, &wem)
 	}
 
