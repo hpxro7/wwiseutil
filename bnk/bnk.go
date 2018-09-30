@@ -17,8 +17,8 @@ const SECTION_HEADER_BYTES = 8
 // excluding its own header.
 const BKHD_SECTION_BYTES = 8
 
-// The number of bytes used to describe a single data index entry
-// within the DIDX section.
+// The number of bytes used to describe a single data index
+// entry (a WemDescriptor) within the DIDX section.
 const DIDX_ENTRY_BYTES = 12
 
 // The identifier for the start of the BKHD (Bank Header) section.
@@ -88,6 +88,7 @@ type Wem struct {
 // A WemDescriptor represents the location of a single wem entity within the
 // SoundBank DATA section.
 type WemDescriptor struct {
+	WemId uint32
 	// The number of bytes from the start of the DATA section's data (after the
 	// header and length) that this wem begins.
 	Offset uint32
@@ -149,9 +150,17 @@ func NewFile(r io.ReaderAt) (*File, error) {
 	return bnk, nil
 }
 
-// Write writes the full contents of this File to the Writer specified by w.
+// WriteTo writes the full contents of this File to the Writer specified by w.
 func (bnk *File) WriteTo(w io.Writer) (written int64, err error) {
 	written, err = bnk.BankHeaderSection.WriteTo(w)
+	if err != nil {
+		return
+	}
+	n, err := bnk.IndexSection.WriteTo(w)
+	if err != nil {
+		return
+	}
+	written += n
 	return written, err
 }
 
@@ -234,6 +243,8 @@ func (hdr *SectionHeader) NewBankHeaderSection(sr *io.SectionReader) (*BankHeade
 	return sec, nil
 }
 
+// WriteTo writes the full contents of this BankHeaderSection to the Writer
+// specified by w.
 func (hdr *BankHeaderSection) WriteTo(w io.Writer) (written int64, err error) {
 	err = binary.Write(w, binary.LittleEndian, hdr.Header)
 	if err != nil {
@@ -264,25 +275,41 @@ func (hdr *SectionHeader) NewDataIndexSection(r io.Reader) (*DataIndexSection, e
 	sec := DataIndexSection{hdr, wemCount, make([]uint32, 0),
 		make(map[uint32]WemDescriptor)}
 	for i := uint32(0); i < wemCount; i++ {
-		var wemId uint32
-		err := binary.Read(r, binary.LittleEndian, &wemId)
-		if err != nil {
-			return nil, err
-		}
-		if _, ok := sec.DescriptorMap[wemId]; ok {
-			panic(fmt.Sprintf("%d is an illegal repeated wem ID in the DIDX", wemId))
-		}
-		sec.WemIds = append(sec.WemIds, wemId)
-
 		var desc WemDescriptor
-		err = binary.Read(r, binary.LittleEndian, &desc)
+		err := binary.Read(r, binary.LittleEndian, &desc)
 		if err != nil {
 			return nil, err
 		}
-		sec.DescriptorMap[wemId] = desc
+
+		if _, ok := sec.DescriptorMap[desc.WemId]; ok {
+			panic(fmt.Sprintf(
+				"%d is an illegal repeated wem ID in the DIDX", desc.WemId))
+		}
+		sec.WemIds = append(sec.WemIds, desc.WemId)
+		sec.DescriptorMap[desc.WemId] = desc
 	}
 
 	return &sec, nil
+}
+
+// WriteTo writes the full contents of this DataIndexSection to the Writer
+// specified by w.
+func (idx *DataIndexSection) WriteTo(w io.Writer) (written int64, err error) {
+	err = binary.Write(w, binary.LittleEndian, idx.Header)
+	if err != nil {
+		return
+	}
+	written = int64(SECTION_HEADER_BYTES)
+
+	for _, id := range idx.WemIds {
+		desc := idx.DescriptorMap[id]
+		err = binary.Write(w, binary.LittleEndian, desc)
+		if err != nil {
+			return
+		}
+		written += int64(DIDX_ENTRY_BYTES)
+	}
+	return written, nil
 }
 
 // NewDataSection creates a new DataSection, reading from sr, which must be
