@@ -10,6 +10,9 @@ import (
 	"strings"
 )
 
+// The number of bytes used to describe the header of a section.
+const SECTION_HEADER_BYTES = 8
+
 // The number of bytes used to describe the known portion of a BKHD section,
 // including its own header.
 const BKHD_SECTION_BYTES = 8
@@ -147,14 +150,24 @@ func NewFile(r io.ReaderAt) (*File, error) {
 }
 
 // Write writes the full contents of this File to the Writer specified by w.
-func (bnk *File) Write(w io.Writer) error {
+func (bnk *File) WriteTo(w io.Writer) (written int64, err error) {
 	hdr := bnk.BankHeaderSection
-	err := binary.Write(w, binary.LittleEndian, hdr.Header)
+	err = binary.Write(w, binary.LittleEndian, hdr.Header)
 	if err != nil {
-		return err
+		return
 	}
-	io.Copy(w, hdr.RemainingReader)
-	return nil
+	written = int64(SECTION_HEADER_BYTES)
+	err = binary.Write(w, binary.LittleEndian, hdr.Descriptor)
+	if err != nil {
+		return
+	}
+	written = int64(BKHD_SECTION_BYTES)
+	n, err := io.Copy(w, hdr.RemainingReader)
+	if err != nil {
+		return
+	}
+	written += int64(n)
+	return written, nil
 }
 
 // Open opens the File at the specified path using os.Open and prepares it for
