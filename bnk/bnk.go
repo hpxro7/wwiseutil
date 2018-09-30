@@ -105,7 +105,7 @@ type WemDescriptor struct {
 type UnknownSection struct {
 	Header *SectionHeader
 	// A reader to read the data of this section.
-	io.Reader
+	Reader io.Reader
 }
 
 // NewFile creates a new File for access Wwise SoundBank files. The file is
@@ -171,6 +171,13 @@ func (bnk *File) WriteTo(w io.Writer) (written int64, err error) {
 		return
 	}
 	written += n
+	for _, other := range bnk.Others {
+		n, err = other.WriteTo(w)
+		if err != nil {
+			return
+		}
+		written += n
+	}
 	return written, err
 }
 
@@ -401,4 +408,22 @@ func (hdr *SectionHeader) NewUnknownSection(sr *io.SectionReader) (*UnknownSecti
 	r := io.NewSectionReader(sr, dataOffset, int64(hdr.Length))
 	sr.Seek(int64(hdr.Length), io.SeekCurrent)
 	return &UnknownSection{hdr, r}, nil
+}
+
+// WriteTo writes the full contents of this UnknownSection to the Writer
+// specified by w.
+func (unknown *UnknownSection) WriteTo(w io.Writer) (written int64, err error) {
+	err = binary.Write(w, binary.LittleEndian, unknown.Header)
+	if err != nil {
+		return
+	}
+	written = int64(SECTION_HEADER_BYTES)
+
+	n, err := io.Copy(w, unknown.Reader)
+	if err != nil {
+		return written, err
+	}
+	written += int64(n)
+
+	return written, nil
 }
