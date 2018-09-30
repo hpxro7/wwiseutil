@@ -112,6 +112,24 @@ func unpack() {
 	fmt.Println("Total bytes written: ", total)
 }
 
+func repack() {
+	bnk, err := bnk.Open(bnkPath)
+	defer bnk.Close()
+	if err != nil {
+		log.Fatalln("Could not parse .bnk file:\n", err)
+	}
+	fmt.Println(bnk)
+	file, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE, os.ModePerm)
+	if err != nil {
+		log.Fatalf("Could not open file \"%s\" for writing: %s", output, err)
+	}
+	n, err := bnk.WriteTo(file)
+	if err != nil {
+		log.Fatalln("Could not write SoundBank to file: ", err)
+	}
+	fmt.Printf("Wrote %d bytes of the SoundBank file\n", n)
+}
+
 func createDirIfEmpty(path string) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return os.Mkdir(output, os.ModePerm)
@@ -127,6 +145,6 @@ func main() {
 	case shouldUnpack:
 		unpack()
 	case shouldRepack:
-		log.Fatal("Repack is currently unimplemented")
+		repack()
 	}
 }
