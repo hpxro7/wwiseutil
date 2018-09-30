@@ -38,8 +38,9 @@ type File struct {
 
 // A BankHeaderSection represents the BKHD section of a SoundBank file.
 type BankHeaderSection struct {
-	Header     *SectionHeader
-	Descriptor BankDescriptor
+	Header          *SectionHeader
+	Descriptor      BankDescriptor
+	RemainingReader io.Reader
 }
 
 // A BankDescriptor provides metadata about the overall SoundBank file.
@@ -71,8 +72,8 @@ type DataSection struct {
 // A Wem represents a single sound entity contained within a SoundBank file.
 type Wem struct {
 	io.Reader
-	sr         *io.SectionReader
-	Descriptor WemDescriptor
+	Descriptor      WemDescriptor
+	RemainingReader io.Reader
 }
 
 // A WemDescriptor represents the location of a single wem entity within the
@@ -205,7 +206,11 @@ func (hdr *SectionHeader) NewBankHeaderSection(sr *io.SectionReader) (*BankHeade
 		return nil, err
 	}
 	sec.Descriptor = desc
-	sr.Seek(int64(hdr.Length-BKHD_SECTION_BYTES), io.SeekCurrent)
+	// Get the offset into the file where the known portion of the BKHD ends.
+	knownOffset, _ := sr.Seek(0, io.SeekCurrent)
+	remaining := int64(hdr.Length - BKHD_SECTION_BYTES)
+	sec.RemainingReader = io.NewSectionReader(sr, knownOffset, remaining)
+	sr.Seek(remaining, io.SeekCurrent)
 
 	return sec, nil
 }
@@ -251,16 +256,36 @@ func (hdr *SectionHeader) NewDataSection(sr *io.SectionReader,
 	if hdr.Identifier != dataHeaderId {
 		panic(fmt.Sprintf("Expected DATA header but got: %s", hdr.Identifier))
 	}
-	dataOffset, err := sr.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return nil, err
-	}
+	dataOffset, _ := sr.Seek(0, io.SeekCurrent)
+
 	sec := DataSection{hdr, uint32(dataOffset), make([]*Wem, 0)}
-	for _, id := range idx.WemIds {
+	for i, id := range idx.WemIds {
 		desc := idx.DescriptorMap[id]
 		wemStartOffset := dataOffset + int64(desc.Offset)
 		wemReader := io.NewSectionReader(sr, wemStartOffset, int64(desc.Length))
-		wem := Wem{wemReader, wemReader, desc}
+
+		var remReader io.Reader
+
+		if i <= len(idx.WemIds)-1 {
+			wemEndOffset := wemStartOffset + int64(desc.Length)
+			var nextOffset int64
+			if i == len(idx.WemIds)-1 {
+				// This is the last wem, check how many bytes remain until the end of
+				// the data section.
+				nextOffset = dataOffset + int64(hdr.Length)
+			} else {
+				// This is not the last wem, check how many bytes remain until the next
+				// wem.
+				nextDesc := idx.DescriptorMap[idx.WemIds[i+1]]
+				nextOffset = dataOffset + int64(nextDesc.Offset)
+			}
+			remaining := nextOffset - wemEndOffset
+			if remaining > 0 {
+				remReader = io.NewSectionReader(sr, wemEndOffset, remaining)
+			}
+		}
+
+		wem := Wem{wemReader, desc, remReader}
 		sec.Wems = append(sec.Wems, &wem)
 	}
 
