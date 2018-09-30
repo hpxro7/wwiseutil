@@ -33,7 +33,13 @@ type File struct {
 	BankHeaderSection *BankHeaderSection
 	IndexSection      *DataIndexSection
 	DataSection       *DataSection
-	Others            []*SectionHeader
+	Others            []*UnknownSection
+}
+
+// A SectionHeader represents a single Wwise SoundBank header.
+type SectionHeader struct {
+	Identifier [4]byte
+	Length     uint32
 }
 
 // A BankHeaderSection represents the BKHD section of a SoundBank file.
@@ -86,10 +92,11 @@ type WemDescriptor struct {
 	Length uint32
 }
 
-// A SectionHeader represents a single Wwise SoundBank header.
-type SectionHeader struct {
-	Identifier [4]byte
-	Length     uint32
+// An UnknownSection represents an unknown section in a SoundBank file.
+type UnknownSection struct {
+	Header *SectionHeader
+	// A reader to read the data of this section.
+	io.Reader
 }
 
 // NewFile creates a new File for access Wwise SoundBank files. The file is
@@ -128,8 +135,11 @@ func NewFile(r io.ReaderAt) (*File, error) {
 			}
 			bnk.DataSection = sec
 		default:
-			bnk.Others = append(bnk.Others, hdr)
-			sr.Seek(int64(hdr.Length), io.SeekCurrent)
+			sec, err := hdr.NewUnknownSection(sr)
+			if err != nil {
+				return nil, err
+			}
+			bnk.Others = append(bnk.Others, sec)
 		}
 	}
 
@@ -185,7 +195,7 @@ func (bnk *File) String() string {
 	fmt.Fprintf(b, "%s: len(%d)\n", data.Header.Identifier, data.Header.Length)
 
 	for _, sec := range bnk.Others {
-		fmt.Fprintf(b, "%s: len(%d)\n", sec.Identifier, sec.Length)
+		fmt.Fprintf(b, "%s: len(%d)\n", sec.Header.Identifier, sec.Header.Length)
 	}
 
 	return b.String()
@@ -291,4 +301,14 @@ func (hdr *SectionHeader) NewDataSection(sr *io.SectionReader,
 
 	sr.Seek(int64(hdr.Length), io.SeekCurrent)
 	return &sec, nil
+}
+
+// NewUnknownSection creates a new UnknownSection, reading from sr, which
+// must be seeked to the start of the unknown section data.
+func (hdr *SectionHeader) NewUnknownSection(sr *io.SectionReader) (*UnknownSection, error) {
+	// Get the offset into the file where the data portion of this section begins.
+	dataOffset, _ := sr.Seek(0, io.SeekCurrent)
+	r := io.NewSectionReader(sr, dataOffset, int64(hdr.Length))
+	sr.Seek(int64(hdr.Length), io.SeekCurrent)
+	return &UnknownSection{hdr, r}, nil
 }
