@@ -42,6 +42,7 @@ type BankHeaderSection struct {
 	Descriptor BankDescriptor
 }
 
+// A BankDescriptor provides metadata about the overall SoundBank file.
 type BankDescriptor struct {
 	Version uint32
 	BankId  uint32
