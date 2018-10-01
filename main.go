@@ -21,6 +21,7 @@ var shouldUnpack bool
 var shouldRepack bool
 var bnkPath string
 var output string
+var targetPath string
 
 func init() {
 	const (
@@ -42,9 +43,9 @@ func init() {
 
 func init() {
 	const (
-		usage = "the path to the target .bnk. When unpack is used, this is the " +
+		usage = "the path to the source .bnk. When unpack is used, this is the " +
 			"bnk file to unpack. When repack is used, this is the template bnk " +
-			"used; wem files will be replaced using this bnk."
+			"used; wem files will be replaced using this bnk as a source."
 		flagName = "bnkpath"
 	)
 	flag.StringVar(&bnkPath, flagName, "", usage)
@@ -59,6 +60,15 @@ func init() {
 	)
 	flag.StringVar(&output, flagName, "", usage)
 	flag.StringVar(&output, "o", "", shorthandDesc(flagName))
+}
+
+func init() {
+	const (
+		usage    = "The directory to find .wem files in for replacing."
+		flagName = "target"
+	)
+	flag.StringVar(&targetPath, flagName, "", usage)
+	flag.StringVar(&targetPath, "t", "", shorthandDesc(flagName))
 }
 
 func shorthandDesc(flagName string) string {
@@ -76,6 +86,19 @@ func verifyFlags() {
 		err = "bnkpath cannot be empty"
 	case output == "":
 		err = "output cannot be empty"
+	}
+
+	if err != "" {
+		flag.Usage()
+		log.Fatal(err)
+	}
+}
+
+func verifyRepackFlags() {
+	var err flagError
+	switch {
+	case targetPath == "":
+		err = "target cannot be empty"
 	}
 
 	if err != "" {
@@ -123,6 +146,18 @@ func repack() {
 	if err != nil {
 		log.Fatalf("Could not open file \"%s\" for writing: %s", output, err)
 	}
+
+	targetWemPath := filepath.Join(targetPath, "075.wem")
+	tf, err := os.Open(targetWemPath)
+	if err != nil {
+		log.Fatalf("Could not open target, \"%s\": %s\n", targetWemPath, err)
+	}
+	ts, err := tf.Stat()
+	if err != nil {
+		log.Fatalf("Could not stat target, \"%s\": %s\n", targetWemPath, err)
+	}
+	bnk.ReplaceWem(74, tf, ts.Size())
+
 	n, err := bnk.WriteTo(file)
 	if err != nil {
 		log.Fatalln("Could not write SoundBank to file: ", err)
@@ -145,6 +180,7 @@ func main() {
 	case shouldUnpack:
 		unpack()
 	case shouldRepack:
+		verifyRepackFlags()
 		repack()
 	}
 }

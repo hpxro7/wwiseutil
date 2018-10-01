@@ -108,6 +108,12 @@ type UnknownSection struct {
 	Reader io.Reader
 }
 
+// A utility ReaderAt that emits an infinite stream of a specific value.
+type InfiniteReaderAt struct {
+	// The value that this padding writer will write.
+	Value byte
+}
+
 // NewFile creates a new File for access Wwise SoundBank files. The file is
 // expected to start at position 0 in the io.ReaderAt.
 func NewFile(r io.ReaderAt) (*File, error) {
@@ -374,6 +380,34 @@ func (hdr *SectionHeader) NewDataSection(sr *io.SectionReader,
 
 	sr.Seek(int64(hdr.Length), io.SeekCurrent)
 	return &sec, nil
+}
+
+// ReadAt fills all of len(p) bytes with the Value of this InfiniteReaderAt.
+func (r *InfiniteReaderAt) ReadAt(p []byte, off int64) (int, error) {
+	for i, _ := range p {
+		p[i] = r.Value
+	}
+	return 1, nil
+}
+
+// ReplaceWem replaces the wem of File at index i, reading the wem, with
+// specified length in from r.
+func (bnk *File) ReplaceWem(i int, r io.ReaderAt, length int64) {
+	wem := bnk.DataSection.Wems[i]
+	oldLength := int64(wem.Descriptor.Length)
+	if length > oldLength {
+		panic("Replacing target wems that are larger than the original wems is " +
+			"not yet supported")
+	}
+	diff := oldLength - length
+	wem.Reader = io.NewSectionReader(r, 0, length)
+	remaining := int64(diff) + wem.RemainingLength
+	wem.RemainingReader = io.NewSectionReader(&InfiniteReaderAt{0}, 0, remaining)
+
+	oldDesc := wem.Descriptor
+	desc := WemDescriptor{oldDesc.WemId, oldDesc.Offset, uint32(length)}
+	wem.Descriptor = desc
+	bnk.IndexSection.DescriptorMap[desc.WemId] = desc
 }
 
 // WriteTo writes the full contents of this DataSection to the Writer specified
