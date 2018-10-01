@@ -43,7 +43,7 @@ func init() {
 
 func init() {
 	const (
-		usage    = "repack a set of .wem files into a .bnk file"
+		usage    = "repack and replace a set of .wem files into a source .bnk file"
 		flagName = "repack"
 	)
 	flag.BoolVar(&shouldRepack, flagName, false, usage)
@@ -126,7 +126,6 @@ func unpack() {
 	if err != nil {
 		log.Fatalln("Could not parse .bnk file:\n", err)
 	}
-	fmt.Println(bnk)
 
 	err = createDirIfEmpty(output)
 	if err != nil {
@@ -145,7 +144,9 @@ func unpack() {
 		}
 		total += n
 	}
-	fmt.Println("Total bytes written: ", total)
+	fmt.Printf("Successfully wrote %d wem(s) to %s\n", len(bnk.DataSection.Wems),
+		output)
+	fmt.Printf("Wrote %d bytes in total\n", total)
 }
 
 func repack() {
@@ -170,12 +171,12 @@ func repack() {
 		bnk.ReplaceWem(t.WemIndex, t, t.FileSize)
 	}
 
-	n, err := bnk.WriteTo(outputFile)
+	total, err := bnk.WriteTo(outputFile)
 	if err != nil {
 		log.Fatalln("Could not write SoundBank to file: ", err)
 	}
 	fmt.Println("Sucessfuly repacked SoundBank file to:", output)
-	fmt.Printf("Wrote %d bytes in total.\n", n)
+	fmt.Printf("Wrote %d bytes in total\n", total)
 }
 
 func processTargetFiles(bnk *bnk.File, fis []os.FileInfo) []*targetWem {
@@ -209,7 +210,11 @@ func processTargetFiles(bnk *bnk.File, fis []os.FileInfo) []*targetWem {
 		names = append(names, fi.Name())
 		targets = append(targets, &targetWem{f, wemIndex, fi.Size()})
 	}
-	fmt.Println("Using replacement wem(s):", strings.Join(names, ", "))
+	if len(targets) == 0 {
+		log.Fatal("There are no replacement wems")
+	}
+	fmt.Printf("Using %d replacement wem(s): %s\n", len(targets),
+		strings.Join(names, ", "))
 	return targets
 }
 
