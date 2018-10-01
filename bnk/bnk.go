@@ -392,12 +392,13 @@ func (r *InfiniteReaderAt) ReadAt(p []byte, off int64) (int, error) {
 
 // ReplaceWem replaces the wem of File at index i, reading the wem, with
 // specified length in from r.
-func (bnk *File) ReplaceWem(i int, r io.ReaderAt, length int64) {
+func (bnk *File) ReplaceWem(r io.ReaderAt, i int, length int64) {
 	wem := bnk.DataSection.Wems[i]
 	oldLength := int64(wem.Descriptor.Length)
 	if length > oldLength {
-		panic("Replacing target wems that are larger than the original wems is " +
-			"not yet supported")
+		panic(fmt.Sprintf("Target wem at index %d (%d bytes) is larger than the "+
+			"original wem (%d bytes).\nUsing target wems that are larger than "+
+			"the original wem is not yet supported", i, length, oldLength))
 	}
 	diff := oldLength - length
 	wem.Reader = io.NewSectionReader(r, 0, length)

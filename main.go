@@ -133,6 +133,8 @@ func unpack() {
 	}
 	total := int64(0)
 	for i, wem := range bnk.DataSection.Wems {
+		// Wems are indexed internally starting from 0, but the file names start
+		// at 1.
 		filename := fmt.Sprintf("%03d.wem", i+1)
 		f, err := os.Create(filepath.Join(output, filename))
 		if err != nil {
@@ -168,7 +170,7 @@ func repack() {
 	targets := processTargetFiles(bnk, targetFileInfos)
 
 	for _, t := range targets {
-		bnk.ReplaceWem(t.WemIndex, t, t.FileSize)
+		bnk.ReplaceWem(t, t.WemIndex, t.FileSize)
 	}
 
 	total, err := bnk.WriteTo(outputFile)
@@ -191,14 +193,17 @@ func processTargetFiles(bnk *bnk.File, fis []os.FileInfo) []*targetWem {
 			continue
 		}
 		wemIndex, err := strconv.Atoi(strings.TrimSuffix(name, ext))
+		// Wems are indexed internally starting from 0, but the file names start
+		// at 1.
+		wemIndex--
 		if err != nil {
 			log.Printf("Ignoring %s: It does not have a valid integer name",
 				name)
 			continue
 		}
-		if wemIndex <= 0 || wemIndex > bnk.IndexSection.WemCount {
+		if wemIndex < 0 || wemIndex >= bnk.IndexSection.WemCount {
 			log.Printf("Ignoring %s: This SoundBank's valid index range is "+
-				"%d ot %d", name, 1, bnk.IndexSection.WemCount)
+				"%d to %d", name, 1, bnk.IndexSection.WemCount)
 			continue
 		}
 		f, err := os.Open(filepath.Join(targetPath, name))
