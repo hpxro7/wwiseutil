@@ -4,9 +4,12 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 )
 
 import (
@@ -14,14 +17,20 @@ import (
 )
 
 const shorthandSuffix = " (shorthand)"
-
-type flagError string
+const wemExtension = ".wem"
 
 var shouldUnpack bool
 var shouldRepack bool
 var bnkPath string
 var output string
 var targetPath string
+
+type flagError string
+type targetWem struct {
+	*os.File
+	WemIndex int
+	FileSize int64
+}
 
 func init() {
 	const (
@@ -64,7 +73,11 @@ func init() {
 
 func init() {
 	const (
-		usage    = "The directory to find .wem files in for replacing."
+		usage = "The directory to find .wem files in for replacing. Each wem " +
+			"file's name must be a number corresponding to the index of the wem " +
+			"file to replace from the source SoundBank. The index of the first wem " +
+			"file is 1. The wems in the source SoundBank will be replaced with the " +
+			"wems in this directory."
 		flagName = "target"
 	)
 	flag.StringVar(&targetPath, flagName, "", usage)
@@ -139,30 +152,65 @@ func repack() {
 	bnk, err := bnk.Open(bnkPath)
 	defer bnk.Close()
 	if err != nil {
-		log.Fatalln("Could not parse .bnk file:\n", err)
-	}
-	fmt.Println(bnk)
-	file, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE, os.ModePerm)
-	if err != nil {
-		log.Fatalf("Could not open file \"%s\" for writing: %s", output, err)
+		log.Fatalln("Could not parse .bnk file:", err)
 	}
 
-	targetWemPath := filepath.Join(targetPath, "075.wem")
-	tf, err := os.Open(targetWemPath)
+	outputFile, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE, os.ModePerm)
 	if err != nil {
-		log.Fatalf("Could not open target, \"%s\": %s\n", targetWemPath, err)
+		log.Fatalf("Could not open file \"%s\" for writing: %s\n", output, err)
 	}
-	ts, err := tf.Stat()
-	if err != nil {
-		log.Fatalf("Could not stat target, \"%s\": %s\n", targetWemPath, err)
-	}
-	bnk.ReplaceWem(74, tf, ts.Size())
 
-	n, err := bnk.WriteTo(file)
+	targetFileInfos, err := ioutil.ReadDir(targetPath)
+	if err != nil {
+		log.Fatalf("Could not open target directory, \"%s\": %s\n", targetPath, err)
+	}
+	targets := processTargetFiles(bnk, targetFileInfos)
+
+	for _, t := range targets {
+		bnk.ReplaceWem(t.WemIndex, t, t.FileSize)
+	}
+
+	n, err := bnk.WriteTo(outputFile)
 	if err != nil {
 		log.Fatalln("Could not write SoundBank to file: ", err)
 	}
-	fmt.Printf("Wrote %d bytes of the SoundBank file\n", n)
+	fmt.Println("Sucessfuly repacked SoundBank file to:", output)
+	fmt.Printf("Wrote %d bytes in total.\n", n)
+}
+
+func processTargetFiles(bnk *bnk.File, fis []os.FileInfo) []*targetWem {
+	var targets []*targetWem
+	var names []string
+	for _, fi := range fis {
+		name := fi.Name()
+		ext := filepath.Ext(name)
+		if ext != wemExtension {
+			log.Printf("Ignoring %s: It does not have a .wem file extension",
+				name)
+			continue
+		}
+		wemIndex, err := strconv.Atoi(strings.TrimSuffix(name, ext))
+		if err != nil {
+			log.Printf("Ignoring %s: It does not have a valid integer name",
+				name)
+			continue
+		}
+		if wemIndex <= 0 || wemIndex > bnk.IndexSection.WemCount {
+			log.Printf("Ignoring %s: This SoundBank's valid index range is "+
+				"%d ot %d", name, 1, bnk.IndexSection.WemCount)
+			continue
+		}
+		f, err := os.Open(filepath.Join(targetPath, name))
+		if err != nil {
+			log.Printf("Ignoring %s: Could not open file: %s", name, err)
+			continue
+		}
+
+		names = append(names, fi.Name())
+		targets = append(targets, &targetWem{f, wemIndex, fi.Size()})
+	}
+	fmt.Println("Using replacement wem(s):", strings.Join(names, ", "))
+	return targets
 }
 
 func createDirIfEmpty(path string) error {

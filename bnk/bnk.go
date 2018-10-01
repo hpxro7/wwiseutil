@@ -62,7 +62,7 @@ type BankDescriptor struct {
 type DataIndexSection struct {
 	Header *SectionHeader
 	// The count of wems in this SoundBank.
-	WemCount uint32
+	WemCount int
 	// A list of all wem IDs, in order of their offset into the file.
 	WemIds []uint32
 	// A mapping from wem ID to its descriptor.
@@ -294,10 +294,10 @@ func (hdr *SectionHeader) NewDataIndexSection(r io.Reader) (*DataIndexSection, e
 	if hdr.Identifier != didxHeaderId {
 		panic(fmt.Sprintf("Expected DIDX header but got: %s", hdr.Identifier))
 	}
-	wemCount := hdr.Length / DIDX_ENTRY_BYTES
+	wemCount := int(hdr.Length / DIDX_ENTRY_BYTES)
 	sec := DataIndexSection{hdr, wemCount, make([]uint32, 0),
 		make(map[uint32]WemDescriptor)}
-	for i := uint32(0); i < wemCount; i++ {
+	for i := 0; i < wemCount; i++ {
 		var desc WemDescriptor
 		err := binary.Read(r, binary.LittleEndian, &desc)
 		if err != nil {
