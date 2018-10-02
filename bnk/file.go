@@ -149,25 +149,12 @@ func (bnk *File) ReplaceWem(r io.ReaderAt, i int, length int64) {
 func (bnk *File) String() string {
 	b := new(strings.Builder)
 
-	// TODO: Turn these into String() for each type.
-	hdr := bnk.BankHeaderSection
-	fmt.Fprintf(b, "%s: len(%d) version(%d) id(%d)\n", hdr.Header.Identifier,
-		hdr.Header.Length, hdr.Descriptor.Version, hdr.Descriptor.BankId)
-
-	idx := bnk.IndexSection
-	total := uint32(0)
-	for _, desc := range idx.DescriptorMap {
-		total += desc.Length
-	}
-	fmt.Fprintf(b, "%s: len(%d) wem_count(%d)\n", idx.Header.Identifier,
-		idx.Header.Length, idx.WemCount)
-	fmt.Fprintf(b, "DIDX WEM total size: %d\n", total)
-
-	data := bnk.DataSection
-	fmt.Fprintf(b, "%s: len(%d)\n", data.Header.Identifier, data.Header.Length)
+	b.WriteString(bnk.BankHeaderSection.String())
+	b.WriteString(bnk.IndexSection.String())
+	b.WriteString(bnk.DataSection.String())
 
 	for _, sec := range bnk.Others {
-		fmt.Fprintf(b, "%s: len(%d)\n", sec.Header.Identifier, sec.Header.Length)
+		b.WriteString(sec.String())
 	}
 
 	return b.String()

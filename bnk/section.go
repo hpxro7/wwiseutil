@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"strings"
 )
 
 // The number of bytes used to describe the header of a section.
@@ -141,6 +142,12 @@ func (hdr *BankHeaderSection) WriteTo(w io.Writer) (written int64, err error) {
 	return written, nil
 }
 
+func (hdr *BankHeaderSection) String() string {
+	return fmt.Sprintf("%s: len(%d) version(%d) id(%d)\n",
+		hdr.Header.Identifier, hdr.Header.Length, hdr.Descriptor.Version,
+		hdr.Descriptor.BankId)
+}
+
 // NewDataIndexSection creates a new DataIndexSection, reading from r, which must
 // be seeked to the start of the DIDX section data.
 // It is an error to call this method on a non-DIDX header.
@@ -187,6 +194,18 @@ func (idx *DataIndexSection) WriteTo(w io.Writer) (written int64, err error) {
 		written += int64(DIDX_ENTRY_BYTES)
 	}
 	return written, nil
+}
+
+func (idx *DataIndexSection) String() string {
+	b := new(strings.Builder)
+	total := uint32(0)
+	for _, desc := range idx.DescriptorMap {
+		total += desc.Length
+	}
+	fmt.Fprintf(b, "%s: len(%d) wem_count(%d)\n", idx.Header.Identifier,
+		idx.Header.Length, idx.WemCount)
+	fmt.Fprintf(b, "DIDX WEM total size: %d\n", total)
+	return b.String()
 }
 
 // NewDataSection creates a new DataSection, reading from sr, which must be
@@ -260,6 +279,10 @@ func (data *DataSection) WriteTo(w io.Writer) (written int64, err error) {
 	return written, nil
 }
 
+func (data *DataSection) String() string {
+	return fmt.Sprintf("%s: len(%d)\n", data.Header.Identifier, data.Header.Length)
+}
+
 // NewUnknownSection creates a new UnknownSection, reading from sr, which
 // must be seeked to the start of the unknown section data.
 func (hdr *SectionHeader) NewUnknownSection(sr *io.SectionReader) (*UnknownSection, error) {
@@ -286,4 +309,9 @@ func (unknown *UnknownSection) WriteTo(w io.Writer) (written int64, err error) {
 	written += int64(n)
 
 	return written, nil
+}
+
+func (unknown *UnknownSection) String() string {
+	return fmt.Sprintf("%s: len(%d)\n", unknown.Header.Identifier,
+		unknown.Header.Length)
 }
