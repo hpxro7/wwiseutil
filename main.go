@@ -27,11 +27,6 @@ var targetPath string
 var verbose bool
 
 type flagError string
-type targetWem struct {
-	*os.File
-	WemIndex int
-	FileSize int64
-}
 
 func init() {
 	const (
@@ -190,9 +185,7 @@ func repack() {
 	}
 	targets := processTargetFiles(bnk, targetFileInfos)
 
-	for _, t := range targets {
-		bnk.ReplaceWem(t, t.WemIndex, t.FileSize)
-	}
+	bnk.ReplaceWems(targets...)
 
 	total, err := bnk.WriteTo(outputFile)
 	if err != nil {
@@ -202,8 +195,8 @@ func repack() {
 	fmt.Printf("Wrote %d bytes in total\n", total)
 }
 
-func processTargetFiles(bnk *bnk.File, fis []os.FileInfo) []*targetWem {
-	var targets []*targetWem
+func processTargetFiles(b *bnk.File, fis []os.FileInfo) []*bnk.ReplacementWem {
+	var targets []*bnk.ReplacementWem
 	var names []string
 	for _, fi := range fis {
 		name := fi.Name()
@@ -222,9 +215,9 @@ func processTargetFiles(bnk *bnk.File, fis []os.FileInfo) []*targetWem {
 				name)
 			continue
 		}
-		if wemIndex < 0 || wemIndex >= bnk.IndexSection.WemCount {
+		if wemIndex < 0 || wemIndex >= b.IndexSection.WemCount {
 			log.Printf("Ignoring %s: This SoundBank's valid index range is "+
-				"%d to %d", name, 1, bnk.IndexSection.WemCount)
+				"%d to %d", name, 1, b.IndexSection.WemCount)
 			continue
 		}
 		f, err := os.Open(filepath.Join(targetPath, name))
@@ -234,7 +227,7 @@ func processTargetFiles(bnk *bnk.File, fis []os.FileInfo) []*targetWem {
 		}
 
 		names = append(names, fi.Name())
-		targets = append(targets, &targetWem{f, wemIndex, fi.Size()})
+		targets = append(targets, &bnk.ReplacementWem{f, wemIndex, fi.Size()})
 	}
 	if len(targets) == 0 {
 		log.Fatal("There are no replacement wems")

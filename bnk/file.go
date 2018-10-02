@@ -20,6 +20,17 @@ type File struct {
 	Others            []*UnknownSection
 }
 
+// A ReplacementWem defines a wem to be replaced into an original SoundBank File.
+type ReplacementWem struct {
+	// The reader pointing to the contents of the new wem.
+	Wem io.ReaderAt
+	// The index, where zero is the first wem, into the original SoundBank's wems
+	// to replace.
+	WemIndex int
+	// The number of bytes to read in for this wem.
+	Length int64
+}
+
 // NewFile creates a new File for access Wwise SoundBank files. The file is
 // expected to start at position 0 in the io.ReaderAt.
 func NewFile(r io.ReaderAt) (*File, error) {
@@ -127,23 +138,26 @@ func (bnk *File) Close() error {
 
 // ReplaceWem replaces the wem of File at index i, reading the wem, with
 // specified length in from r.
-func (bnk *File) ReplaceWem(r io.ReaderAt, i int, length int64) {
-	wem := bnk.DataSection.Wems[i]
-	oldLength := int64(wem.Descriptor.Length)
-	if length > oldLength {
-		panic(fmt.Sprintf("Target wem at index %d (%d bytes) is larger than the "+
-			"original wem (%d bytes).\nUsing target wems that are larger than "+
-			"the original wem is not yet supported", i, length, oldLength))
-	}
-	diff := oldLength - length
-	wem.Reader = io.NewSectionReader(r, 0, length)
-	remaining := int64(diff) + wem.RemainingLength
-	wem.RemainingReader = io.NewSectionReader(&InfiniteReaderAt{0}, 0, remaining)
+func (bnk *File) ReplaceWems(replacements ...*ReplacementWem) {
+	for _, r := range replacements {
+		length := r.Length
+		wem := bnk.DataSection.Wems[r.WemIndex]
+		oldLength := int64(wem.Descriptor.Length)
+		if length > oldLength {
+			panic(fmt.Sprintf("Target wem at index %d (%d bytes) is larger than the "+
+				"original wem (%d bytes).\nUsing target wems that are larger than "+
+				"the original wem is not yet supported", r.WemIndex, length, oldLength))
+		}
+		diff := oldLength - length
+		wem.Reader = io.NewSectionReader(r.Wem, 0, length)
+		remaining := int64(diff) + wem.RemainingLength
+		wem.RemainingReader = io.NewSectionReader(&InfiniteReaderAt{0}, 0, remaining)
 
-	oldDesc := wem.Descriptor
-	desc := WemDescriptor{oldDesc.WemId, oldDesc.Offset, uint32(length)}
-	wem.Descriptor = desc
-	bnk.IndexSection.DescriptorMap[desc.WemId] = desc
+		oldDesc := wem.Descriptor
+		desc := WemDescriptor{oldDesc.WemId, oldDesc.Offset, uint32(length)}
+		wem.Descriptor = desc
+		bnk.IndexSection.DescriptorMap[desc.WemId] = desc
+	}
 }
 
 func (bnk *File) String() string {
