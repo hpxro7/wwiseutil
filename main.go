@@ -133,9 +133,13 @@ func unpack() {
 	}
 	total := int64(0)
 	for i, wem := range bnk.DataSection.Wems {
+		// Grow or shrink the number of leading '0's in a filename, based on the
+		// maximum number of wems being unpacked.
+		maxDigits := strconv.Itoa(len(strconv.Itoa(bnk.IndexSection.WemCount)))
+		filenameFmt := strings.Join([]string{"%0", maxDigits, "d.wem"}, "")
 		// Wems are indexed internally starting from 0, but the file names start
 		// at 1.
-		filename := fmt.Sprintf("%03d.wem", i+1)
+		filename := fmt.Sprintf(filenameFmt, i+1)
 		f, err := os.Create(filepath.Join(output, filename))
 		if err != nil {
 			log.Fatalf("Could not create wem file \"%s\": %s", filename, err)
