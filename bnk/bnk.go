@@ -3,6 +3,7 @@ package bnk
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -156,6 +157,10 @@ func NewFile(r io.ReaderAt) (*File, error) {
 			}
 			bnk.Others = append(bnk.Others, sec)
 		}
+	}
+
+	if bnk.DataSection == nil {
+		return nil, errors.New("There are no wems stored within this SoundBank.")
 	}
 
 	return bnk, nil

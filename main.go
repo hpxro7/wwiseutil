@@ -124,7 +124,7 @@ func unpack() {
 	bnk, err := bnk.Open(bnkPath)
 	defer bnk.Close()
 	if err != nil {
-		log.Fatalln("Could not parse .bnk file:\n", err)
+		log.Fatalln("Could not parse .bnk file:", err)
 	}
 
 	err = createDirIfEmpty(output)
