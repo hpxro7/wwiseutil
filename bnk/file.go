@@ -4,10 +4,10 @@ package bnk
 import (
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"io"
 	"math"
 	"os"
+	"sort"
 	"strings"
 )
 
@@ -29,6 +29,14 @@ type ReplacementWem struct {
 	WemIndex int
 	// The number of bytes to read in for this wem.
 	Length int64
+}
+
+type ReplacementWems []*ReplacementWem
+
+// ByWemIndex implements the sort.Interface for sorting a slice of
+// ReplacementWems in ascending order of their WemIndex.
+type ByWemIndex struct {
+	ReplacementWems
 }
 
 // NewFile creates a new File for access Wwise SoundBank files. The file is
@@ -138,25 +146,50 @@ func (bnk *File) Close() error {
 
 // ReplaceWem replaces the wem of File at index i, reading the wem, with
 // specified length in from r.
-func (bnk *File) ReplaceWems(replacements ...*ReplacementWem) {
-	for _, r := range replacements {
-		length := r.Length
+func (bnk *File) ReplaceWems(rs ...*ReplacementWem) {
+	sort.Sort(ByWemIndex{rs})
+	surplus := int64(0)
+	for i, r := range rs {
+		newLength := r.Length
 		wem := bnk.DataSection.Wems[r.WemIndex]
-		oldLength := int64(wem.Descriptor.Length)
-		if length > oldLength {
-			panic(fmt.Sprintf("Target wem at index %d (%d bytes) is larger than the "+
-				"original wem (%d bytes).\nUsing target wems that are larger than "+
-				"the original wem is not yet supported", r.WemIndex, length, oldLength))
-		}
-		diff := oldLength - length
-		wem.Reader = io.NewSectionReader(r.Wem, 0, length)
-		remaining := int64(diff) + wem.RemainingLength
-		wem.RemainingReader = io.NewSectionReader(&InfiniteReaderAt{0}, 0, remaining)
-
 		oldDesc := wem.Descriptor
-		desc := WemDescriptor{oldDesc.WemId, oldDesc.Offset, uint32(length)}
-		wem.Descriptor = desc
-		bnk.IndexSection.DescriptorMap[desc.WemId] = desc
+		oldLength := int64(oldDesc.Length)
+
+		diff := oldLength - newLength
+		wem.Reader = io.NewSectionReader(r.Wem, 0, newLength)
+		remaining := int64(diff) + wem.RemainingLength
+
+		if newLength > oldLength {
+			surplus += newLength - oldLength
+			// Take up any remaining padding space if we have a surplus
+			if remaining >= surplus {
+				remaining, surplus = remaining-surplus, 0
+			} else {
+				remaining, surplus = 0, surplus-remaining
+			}
+		}
+
+		// Update the length of the descriptor. This, by pointer dereference,
+		// updates the descriptor stored in the IndexSection's DescriptorMap, as
+		// well.
+		wem.Descriptor.Length = uint32(newLength)
+		wem.RemainingReader = io.NewSectionReader(&InfiniteReaderAt{0}, 0,
+			remaining)
+
+		lastWi := bnk.IndexSection.WemCount - 1
+		for wi := r.WemIndex + 1; surplus > 0 && wi != lastWi; wi++ {
+			// There is a surplus, we're not at the last possible wem and we're not the
+			// next replacement wem; update shift offsets to respect the new length of
+			// r.
+			wem := bnk.DataSection.Wems[wi]
+			wem.Descriptor.Offset += uint32(surplus)
+			if i+1 < len(rs) && wi == rs[i+1].WemIndex {
+				// We have just replaced the offset for the next replacement wem. Stop
+				// ammending offsets in case the next replacement wem can absorb the
+				// surplus in it's padding.
+				break
+			}
+		}
 	}
 }
 
@@ -172,4 +205,16 @@ func (bnk *File) String() string {
 	}
 
 	return b.String()
+}
+
+func (rs ReplacementWems) Len() int {
+	return len(rs)
+}
+
+func (rs ReplacementWems) Swap(i, j int) {
+	rs[i], rs[j] = rs[j], rs[i]
+}
+
+func (b ByWemIndex) Less(i, j int) bool {
+	return b.ReplacementWems[i].WemIndex < b.ReplacementWems[j].WemIndex
 }
