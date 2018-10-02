@@ -24,6 +24,7 @@ var shouldRepack bool
 var bnkPath string
 var output string
 var targetPath string
+var verbose bool
 
 type flagError string
 type targetWem struct {
@@ -84,6 +85,16 @@ func init() {
 	flag.StringVar(&targetPath, "t", "", shorthandDesc(flagName))
 }
 
+func init() {
+	const (
+		usage = "Shows additional information about the strcuture of the parsed " +
+			"SoundBank file."
+		flagName = "verbose"
+	)
+	flag.BoolVar(&verbose, flagName, false, usage)
+	flag.BoolVar(&verbose, "v", false, shorthandDesc(flagName))
+}
+
 func shorthandDesc(flagName string) string {
 	return "(shorthand for -" + flagName + ")"
 }
@@ -126,6 +137,9 @@ func unpack() {
 	if err != nil {
 		log.Fatalln("Could not parse .bnk file:", err)
 	}
+	if verbose {
+		fmt.Println(bnk)
+	}
 
 	err = createDirIfEmpty(output)
 	if err != nil {
@@ -160,6 +174,9 @@ func repack() {
 	defer bnk.Close()
 	if err != nil {
 		log.Fatalln("Could not parse .bnk file:", err)
+	}
+	if verbose {
+		fmt.Println(bnk)
 	}
 
 	outputFile, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE, os.ModePerm)
