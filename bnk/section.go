@@ -204,7 +204,7 @@ func (idx *DataIndexSection) String() string {
 	}
 	fmt.Fprintf(b, "%s: len(%d) wem_count(%d)\n", idx.Header.Identifier,
 		idx.Header.Length, idx.WemCount)
-	fmt.Fprintf(b, "DIDX WEM total size: %d\n", total)
+	fmt.Fprintf(b, "DIDX: WEM total size: %d\n", total)
 	return b.String()
 }
 
@@ -280,7 +280,21 @@ func (data *DataSection) WriteTo(w io.Writer) (written int64, err error) {
 }
 
 func (data *DataSection) String() string {
-	return fmt.Sprintf("%s: len(%d)\n", data.Header.Identifier, data.Header.Length)
+	b := new(strings.Builder)
+	fmt.Fprintf(b, "%s: len(%d)\n", data.Header.Identifier, data.Header.Length)
+
+	tableParams := []string{"%-7", "%-15", "%-15", "%-8", "\n"}
+	titleFmt := strings.Join(tableParams, "s|")
+	wemFmt := strings.Join(tableParams, "d|")
+	title := fmt.Sprintf(titleFmt, "Index", "Offset", "Length", "Padding")
+	fmt.Fprint(b, title)
+	fmt.Fprintln(b, strings.Repeat("-", len(title)-1))
+
+	for i, wem := range data.Wems {
+		desc := wem.Descriptor
+		fmt.Fprintf(b, wemFmt, i+1, desc.Offset, desc.Length, wem.RemainingLength)
+	}
+	return b.String()
 }
 
 // NewUnknownSection creates a new UnknownSection, reading from sr, which
