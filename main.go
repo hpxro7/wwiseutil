@@ -174,11 +174,6 @@ func repack() {
 		fmt.Println(bnk)
 	}
 
-	outputFile, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE, os.ModePerm)
-	if err != nil {
-		log.Fatalf("Could not open file \"%s\" for writing: %s\n", output, err)
-	}
-
 	targetFileInfos, err := ioutil.ReadDir(targetPath)
 	if err != nil {
 		log.Fatalf("Could not open target directory, \"%s\": %s\n", targetPath, err)
@@ -187,6 +182,10 @@ func repack() {
 
 	bnk.ReplaceWems(targets...)
 
+	outputFile, err := os.Create(output)
+	if err != nil {
+		log.Fatalf("Could not create output file \"%s\": %s\n", output, err)
+	}
 	total, err := bnk.WriteTo(outputFile)
 	if err != nil {
 		log.Fatalln("Could not write SoundBank to file: ", err)
