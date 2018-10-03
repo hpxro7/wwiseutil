@@ -20,7 +20,7 @@ const shorthandSuffix = " (shorthand)"
 const wemExtension = ".wem"
 
 var shouldUnpack bool
-var shouldRepack bool
+var shouldReplace bool
 var bnkPath string
 var output string
 var targetPath string
@@ -39,18 +39,20 @@ func init() {
 
 func init() {
 	const (
-		usage    = "repack and replace a set of .wem files into a source .bnk file"
-		flagName = "repack"
+		usage = "replace a set of .wem files from a source .bnk file, outputing " +
+			"a fully usable .bnk with wems, offsets and lengths updated."
+		flagName = "replace"
 	)
-	flag.BoolVar(&shouldRepack, flagName, false, usage)
-	flag.BoolVar(&shouldRepack, "r", false, shorthandDesc(flagName))
+	flag.BoolVar(&shouldReplace, flagName, false, usage)
+	flag.BoolVar(&shouldReplace, "r", false, shorthandDesc(flagName))
 }
 
 func init() {
 	const (
 		usage = "the path to the source .bnk. When unpack is used, this is the " +
-			"bnk file to unpack. When repack is used, this is the template bnk " +
-			"used; wem files will be replaced using this bnk as a source."
+			"bnk file to unpack. When replace is used, this .bnk is used as a " +
+			"source; the wem files, offsets and lengths of this .bnk will updated " +
+			"and written to the file specified by output."
 		flagName = "bnkpath"
 	)
 	flag.StringVar(&bnkPath, flagName, "", usage)
@@ -59,8 +61,9 @@ func init() {
 
 func init() {
 	const (
-		usage = "The directory to output .wem files for unpacking or the" +
-			"directory to output the combined .bnk file for repacking."
+		usage = "When unpack is used, this is the directory to output unpacked " +
+			".wem files. When replace is used, this is the directory to output the " +
+			"updated .bnk."
 		flagName = "output"
 	)
 	flag.StringVar(&output, flagName, "", usage)
@@ -73,7 +76,8 @@ func init() {
 			"file's name must be a number corresponding to the index of the wem " +
 			"file to replace from the source SoundBank. The index of the first wem " +
 			"file is 1. The wems in the source SoundBank will be replaced with the " +
-			"wems in this directory."
+			"wems in this directory. These wems must not be padded ahead of time. " +
+			"This tool will automatically add any padding needed."
 		flagName = "target"
 	)
 	flag.StringVar(&targetPath, flagName, "", usage)
@@ -97,10 +101,10 @@ func shorthandDesc(flagName string) string {
 func verifyFlags() {
 	var err flagError
 	switch {
-	case !(shouldUnpack || shouldRepack):
-		err = "Either unpack or repack should be specified"
-	case shouldUnpack && shouldRepack:
-		err = "Both unpack and repack cannot be specified"
+	case !(shouldUnpack || shouldReplace):
+		err = "Either unpack or replace should be specified"
+	case shouldUnpack && shouldReplace:
+		err = "Both unpack and replace cannot be specified"
 	case bnkPath == "":
 		err = "bnkpath cannot be empty"
 	case output == "":
@@ -113,7 +117,7 @@ func verifyFlags() {
 	}
 }
 
-func verifyRepackFlags() {
+func verifyReplaceFlags() {
 	var err flagError
 	switch {
 	case targetPath == "":
@@ -164,7 +168,7 @@ func unpack() {
 	fmt.Printf("Wrote %d bytes in total\n", total)
 }
 
-func repack() {
+func replace() {
 	bnk, err := bnk.Open(bnkPath)
 	defer bnk.Close()
 	if err != nil {
@@ -190,7 +194,7 @@ func repack() {
 	if err != nil {
 		log.Fatalln("Could not write SoundBank to file: ", err)
 	}
-	fmt.Println("Sucessfuly repacked SoundBank file to:", output)
+	fmt.Println("Sucessfuly replaced! SoundBank file written to:", output)
 	fmt.Printf("Wrote %d bytes in total\n", total)
 }
 
@@ -250,8 +254,8 @@ func main() {
 	switch {
 	case shouldUnpack:
 		unpack()
-	case shouldRepack:
-		verifyRepackFlags()
-		repack()
+	case shouldReplace:
+		verifyReplaceFlags()
+		replace()
 	}
 }
