@@ -149,8 +149,10 @@ func (bnk *File) Close() error {
 func (bnk *File) ReplaceWems(rs ...*ReplacementWem) {
 	// Ammending offsets in case of a surplus in a single pass, in O(n) time, as
 	// opposed to O(n^2), requires that the replacements happen in the order
-	// that their wem will appear in the file.
+	// that their wem will appear in the file; sorting them by index achives this.
 	sort.Sort(ByWemIndex{rs})
+	// Surplus is the number of bytes a wem offset needs to be increased by,
+	// because of a increase in a previous wem's size.
 	surplus := int64(0)
 	for i, r := range rs {
 		wem := bnk.DataSection.Wems[r.WemIndex]
@@ -160,21 +162,15 @@ func (bnk *File) ReplaceWems(rs ...*ReplacementWem) {
 		padding := wem.Padding.Size()
 		if newLength > oldLength {
 			surplus += newLength - oldLength
-			// Take up any remaining padding space if we have a surplus
-			if padding >= surplus {
-				// We consume some of our padding, or exactly all of it. We don't need
-				// to recompute our alignment padding for our wem: it now sits by the
-				// next (aligned) wem or the remaining padding will align us to the
-				// nearest 16 bytes.
-				padding, surplus = padding-surplus, 0
-			} else { // padding < surplus
-				// Consume all the previous padding
-				padding, surplus = 0, surplus-padding
-				alignment := surplus % 16
-				padding = alignment
-				surplus += alignment
-			}
+			// Compute the new amount of padding needed to align the next offset (true
+			// end of this wem section) with 16 bytes.
+			padding = (16 - (int64(wem.Descriptor.Offset)+newLength)%16)
+			// Subsequent wem's will need to have their offsets aligned with the end
+			// of our new wem's padding. The offset difference will need to include
+			// the difference in padding between the old wem and the replacement wem.
+			surplus += padding - wem.Padding.Size()
 		} else { // newLength <= oldLength
+			// Pad from the end of the new wem to the offset of the next wem.
 			padding += int64(oldLength - newLength)
 		}
 
@@ -202,6 +198,7 @@ func (bnk *File) ReplaceWems(rs ...*ReplacementWem) {
 		}
 	}
 	if surplus > 0 {
+		// Update the length of the DATA header to account for the change in size.
 		bnk.DataSection.Header.Length += uint32(surplus)
 	}
 }
