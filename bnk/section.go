@@ -72,11 +72,9 @@ type Wem struct {
 	io.Reader
 	Descriptor *WemDescriptor
 	// A reader over the bytes that remain until the next wem if there is one, or
-	// the end of the data section. These bytes are generally NUL(0x00) padding.
-	RemainingReader io.Reader
-	// The number of bytes remaining until the next wem if there is one, or the
-	// end of the data section.
-	RemainingLength int64
+	// the end of the data section. These bytes are NUL(0x00) padding up until the
+	// next 16-aligned byte (i.e. nextWem.Offset % 16 = 0).
+	Padding *io.SectionReader
 }
 
 // A WemDescriptor represents the location of a single wem entity within the
@@ -225,8 +223,7 @@ func (hdr *SectionHeader) NewDataSection(sr *io.SectionReader,
 		wemStartOffset := dataOffset + int64(desc.Offset)
 		wemReader := io.NewSectionReader(sr, wemStartOffset, int64(desc.Length))
 
-		var remReader io.Reader
-		remaining := int64(0)
+		var padding *io.SectionReader
 
 		if i <= len(idx.WemIds)-1 {
 			wemEndOffset := wemStartOffset + int64(desc.Length)
@@ -241,13 +238,13 @@ func (hdr *SectionHeader) NewDataSection(sr *io.SectionReader,
 				nextDesc := idx.DescriptorMap[idx.WemIds[i+1]]
 				nextOffset = dataOffset + int64(nextDesc.Offset)
 			}
-			remaining = nextOffset - wemEndOffset
+			remaining := nextOffset - wemEndOffset
 			// Pass a Reader over the remaining section if we have remaining bytes to
 			// read, or an empty Reader if remaining is 0 (no bytes will be read).
-			remReader = io.NewSectionReader(sr, wemEndOffset, remaining)
+			padding = io.NewSectionReader(sr, wemEndOffset, remaining)
 		}
 
-		wem := Wem{wemReader, desc, remReader, remaining}
+		wem := Wem{wemReader, desc, padding}
 		sec.Wems = append(sec.Wems, &wem)
 	}
 
@@ -269,7 +266,7 @@ func (data *DataSection) WriteTo(w io.Writer) (written int64, err error) {
 			return written, err
 		}
 		written += int64(n)
-		n, err = io.Copy(w, wem.RemainingReader)
+		n, err = io.Copy(w, wem.Padding)
 		if err != nil {
 			return written, err
 		}
@@ -292,7 +289,7 @@ func (data *DataSection) String() string {
 
 	for i, wem := range data.Wems {
 		desc := wem.Descriptor
-		fmt.Fprintf(b, wemFmt, i+1, desc.Offset, desc.Length, wem.RemainingLength)
+		fmt.Fprintf(b, wemFmt, i+1, desc.Offset, desc.Length, wem.Padding.Size())
 	}
 	return b.String()
 }
