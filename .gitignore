@@ -13,3 +13,4 @@
 
 gui/deploy/
 gui/**/moc*
+gui/**/rcc*

@@ -19,7 +19,7 @@ const (
 func main() {
 	log.Println("Starting bnkutil GUI...")
 	app := widgets.NewQApplication(len(os.Args), os.Args)
-	core.QCoreApplication_SetApplicationName("Wwise SoundBank Utils")
+	core.QCoreApplication_SetApplicationName("Wwise Audio Utilities")
 	core.QCoreApplication_SetApplicationVersion("0.3")
 
 	parser := core.NewQCommandLineParser()
