@@ -1,11 +1,12 @@
 package viewer
 
 import (
-	"log"
+	"fmt"
 	"strings"
 )
 
 import (
+	"github.com/hpxro7/bnkutil/bnk"
 	"github.com/hpxro7/bnkutil/util"
 	"github.com/therecipe/qt/core"
 	"github.com/therecipe/qt/gui"
@@ -13,7 +14,8 @@ import (
 )
 
 const (
-	rsrcPath = ":qml/images"
+	rsrcPath   = ":qml/images"
+	errorTitle = "Error encountered"
 )
 
 var fileDialogFilters = strings.Join([]string{
@@ -28,7 +30,7 @@ type WwiseViewerWindow struct {
 	actionSave    *widgets.QAction
 	actionReplace *widgets.QAction
 
-	tableView *widgets.QTableView
+	table *WemTable
 }
 
 func New() *WwiseViewerWindow {
@@ -42,8 +44,8 @@ func New() *WwiseViewerWindow {
 	wv.setupSave(toolbar)
 	wv.setupReplace(toolbar)
 
-	wv.tableView = NewWemTable(NewModel())
-	wv.SetCentralWidget(wv.tableView)
+	wv.table = NewTable()
+	wv.SetCentralWidget(wv.table)
 
 	wv.SetFocus2()
 	return wv
@@ -56,8 +58,7 @@ func (wv *WwiseViewerWindow) setupOpen(toolbar *widgets.QToolBar) {
 		home := util.UserHome()
 		path := widgets.QFileDialog_GetOpenFileName(
 			wv, "Open file", home, fileDialogFilters, "", 0)
-		widgets.QMessageBox_About(wv, "Chose path...", path)
-		log.Println("Chose file:", path)
+		wv.openBnk(path)
 	})
 	toolbar.QWidget.AddAction(wv.actionOpen)
 }
@@ -73,4 +74,14 @@ func (wv *WwiseViewerWindow) setupReplace(toolbar *widgets.QToolBar) {
 		gui.NewQIcon5(rsrcPath+"/replace.png"))
 	wv.actionReplace = widgets.NewQAction3(icon, "&Replace", wv)
 	toolbar.QWidget.AddAction(wv.actionReplace)
+}
+
+func (wv *WwiseViewerWindow) openBnk(path string) {
+	bnk, err := bnk.Open(path)
+	if err != nil {
+		msg := fmt.Sprintf("Could not open %s:\n%s", path, err)
+		widgets.QMessageBox_Critical4(wv, errorTitle, msg, 0, 0)
+		return
+	}
+	wv.table.UpdateWems(bnk.DataSection)
 }
