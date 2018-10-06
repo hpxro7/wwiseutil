@@ -63,6 +63,16 @@ func (wv *WwiseViewerWindow) setupOpen(toolbar *widgets.QToolBar) {
 	toolbar.QWidget.AddAction(wv.actionOpen)
 }
 
+func (wv *WwiseViewerWindow) openBnk(path string) {
+	bnk, err := bnk.Open(path)
+	if err != nil {
+		msg := fmt.Sprintf("Could not open %s:\n%s", path, err)
+		widgets.QMessageBox_Critical4(wv, errorTitle, msg, 0, 0)
+		return
+	}
+	wv.table.UpdateWems(bnk.DataSection)
+}
+
 func (wv *WwiseViewerWindow) setupSave(toolbar *widgets.QToolBar) {
 	icon := gui.QIcon_FromTheme2("wwise-save", gui.NewQIcon5(rsrcPath+"/save.png"))
 	wv.actionSave = widgets.NewQAction3(icon, "&Save", wv)
@@ -74,14 +84,4 @@ func (wv *WwiseViewerWindow) setupReplace(toolbar *widgets.QToolBar) {
 		gui.NewQIcon5(rsrcPath+"/replace.png"))
 	wv.actionReplace = widgets.NewQAction3(icon, "&Replace", wv)
 	toolbar.QWidget.AddAction(wv.actionReplace)
-}
-
-func (wv *WwiseViewerWindow) openBnk(path string) {
-	bnk, err := bnk.Open(path)
-	if err != nil {
-		msg := fmt.Sprintf("Could not open %s:\n%s", path, err)
-		widgets.QMessageBox_Critical4(wv, errorTitle, msg, 0, 0)
-		return
-	}
-	wv.table.UpdateWems(bnk.DataSection)
 }
