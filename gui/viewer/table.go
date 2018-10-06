@@ -18,14 +18,23 @@ type columnBinding struct {
 	accessor wemAccessor
 }
 
+type replacementWrapper struct {
+	name        string
+	replacement *bnk.ReplacementWem
+}
+
 type WemTable struct {
 	widgets.QTableView
+	model *WemModel
 }
 
 type WemModel struct {
 	core.QAbstractTableModel
-	sec      *bnk.DataSection
 	bindings []*columnBinding
+
+	sec *bnk.DataSection
+	// A mapping from wem index to the replacement wem.
+	replacements map[int]*replacementWrapper
 }
 
 func NewTable() *WemTable {
@@ -33,6 +42,7 @@ func NewTable() *WemTable {
 
 	table.VerticalHeader().Hide()
 	table.SetSelectionBehavior(widgets.QAbstractItemView__SelectRows)
+	table.SetSelectionMode(widgets.QAbstractItemView__SingleSelection)
 	table.HorizontalHeader().SetSectionResizeMode(widgets.QHeaderView__Stretch)
 	table.HorizontalHeader().SetHighlightSections(false)
 
@@ -46,16 +56,34 @@ func (t *WemTable) UpdateWems(section *bnk.DataSection) {
 	m.sec = section
 	m.bindings = []*columnBinding{
 		{"Name", m.defaultOr(m.wemName)},
-		{"Replacing with", empty},
+		{"Replacing with", m.wemReplacement},
 		{"Size", m.defaultOr(m.wemSize)},
 		{"File offset", m.defaultOr(m.wemOffset)},
 		{"Padding", m.defaultOr(m.wemPadding)},
 	}
-	t.SetModel(m)
+
+	t.model = m
+	t.SetModel(t.model)
+}
+
+func (t *WemTable) EditWemReplacement(name string, r *bnk.ReplacementWem) {
+	t.model.replacements[r.WemIndex] = &replacementWrapper{name, r}
+	// Modify the entire row for that wem.
+	count := t.model.columnCount(nil)
+	start := t.IndexAt(core.NewQPoint2(r.WemIndex, 0))
+	end := t.IndexAt(core.NewQPoint2(r.WemIndex, count))
+
+	var roles []int
+	for i := 0; i < count; i++ {
+		roles = append(roles, int(core.Qt__DisplayRole))
+	}
+
+	t.DataChanged(start, end, roles)
 }
 
 func newModel() *WemModel {
 	model := NewWemModel(nil)
+	model.replacements = make(map[int]*replacementWrapper)
 
 	model.ConnectRowCount(model.rowCount)
 	model.ConnectColumnCount(model.columnCount)
@@ -78,6 +106,14 @@ func empty(index int) string {
 
 func (m *WemModel) wemName(index int) string {
 	return util.CanonicalWemName(index, len(m.sec.Wems))
+}
+
+func (m *WemModel) wemReplacement(index int) string {
+	r, ok := m.replacements[index]
+	if !ok {
+		return ""
+	}
+	return r.name
 }
 
 func (m *WemModel) wemSize(index int) string {

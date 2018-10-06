@@ -2,6 +2,7 @@ package viewer
 
 import (
 	"fmt"
+	"os"
 	"strings"
 )
 
@@ -23,6 +24,10 @@ var fileDialogFilters = strings.Join([]string{
 	"All files (*.*)",
 }, ";;")
 
+var wemFileFilters = strings.Join([]string{
+	"Wem files (*.wem)",
+}, ";;")
+
 type WwiseViewerWindow struct {
 	widgets.QMainWindow
 
@@ -30,7 +35,8 @@ type WwiseViewerWindow struct {
 	actionSave    *widgets.QAction
 	actionReplace *widgets.QAction
 
-	table *WemTable
+	table          *WemTable
+	selectionIndex int
 }
 
 func New() *WwiseViewerWindow {
@@ -45,6 +51,8 @@ func New() *WwiseViewerWindow {
 	wv.setupReplace(toolbar)
 
 	wv.table = NewTable()
+	wv.selectionIndex = -1
+	wv.table.ConnectSelectionChanged(wv.onWemSelected)
 	wv.SetCentralWidget(wv.table)
 
 	wv.SetFocus2()
@@ -66,8 +74,7 @@ func (wv *WwiseViewerWindow) setupOpen(toolbar *widgets.QToolBar) {
 func (wv *WwiseViewerWindow) openBnk(path string) {
 	bnk, err := bnk.Open(path)
 	if err != nil {
-		msg := fmt.Sprintf("Could not open %s:\n%s", path, err)
-		widgets.QMessageBox_Critical4(wv, errorTitle, msg, 0, 0)
+		wv.showOpenError(path, err)
 		return
 	}
 	wv.table.UpdateWems(bnk.DataSection)
@@ -83,5 +90,53 @@ func (wv *WwiseViewerWindow) setupReplace(toolbar *widgets.QToolBar) {
 	icon := gui.QIcon_FromTheme2("wwise-replace",
 		gui.NewQIcon5(rsrcPath+"/replace.png"))
 	wv.actionReplace = widgets.NewQAction3(icon, "&Replace", wv)
+	wv.actionReplace.SetEnabled(false)
+	wv.actionReplace.ConnectTriggered(func(checked bool) {
+		selection := wv.table.SelectionModel()
+		indexes := selection.SelectedRows(0)
+		if len(indexes) == 0 {
+			return
+		}
+		home := util.UserHome()
+		path := widgets.QFileDialog_GetOpenFileName(
+			wv, "Open file", home, wemFileFilters, "", 0)
+		wv.addReplacement(indexes[0].Row(), path)
+	})
 	toolbar.QWidget.AddAction(wv.actionReplace)
+}
+
+func (wv *WwiseViewerWindow) addReplacement(index int, path string) {
+	wem, err := os.Open(path)
+	if err != nil {
+		wv.showOpenError(path, err)
+	}
+	stat, err := wem.Stat()
+	if err != nil {
+		wv.showOpenError(path, err)
+	}
+	r := &bnk.ReplacementWem{wem, index, stat.Size()}
+	wv.table.EditWemReplacement(stat.Name(), r)
+}
+
+func (wv *WwiseViewerWindow) onWemSelected(selected *core.QItemSelection,
+	deselected *core.QItemSelection) {
+	// The following is an unfortunate hack. Connectiing selection on the
+	// table causes graphical selection glitches, likely because the original
+	// selection logic was overridden. Since we don't have a way to call the super
+	// class's SelectionChanged, we disable this one (to prevent recursion), call
+	// SelectionChanged, and connect it  back.
+	wv.table.DisconnectSelectionChanged()
+	wv.table.SelectionChanged(selected, deselected)
+	wv.table.ConnectSelectionChanged(wv.onWemSelected)
+
+	if len(selected.Indexes()) == 0 {
+		wv.actionReplace.SetEnabled(false)
+		return
+	}
+	wv.actionReplace.SetEnabled(true)
+}
+
+func (wv *WwiseViewerWindow) showOpenError(path string, err error) {
+	msg := fmt.Sprintf("Could not open %s:\n%s", path, err)
+	widgets.QMessageBox_Critical4(wv, errorTitle, msg, 0, 0)
 }
