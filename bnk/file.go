@@ -83,8 +83,8 @@ func NewFile(r io.ReaderAt) (*File, error) {
 		}
 	}
 
-	if bnk.DataSection == nil {
-		return nil, errors.New("There are no wems stored within this SoundBank.")
+	if bnk.DataSection == nil || len(bnk.DataSection.Wems) == 0 {
+		return nil, errors.New("There are no wems stored within this file.")
 	}
 
 	return bnk, nil
