@@ -2,7 +2,9 @@ package viewer
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -34,6 +36,7 @@ type WwiseViewerWindow struct {
 	actionOpen    *widgets.QAction
 	actionSave    *widgets.QAction
 	actionReplace *widgets.QAction
+	actionExport  *widgets.QAction
 
 	table          *WemTable
 	selectionIndex int
@@ -49,6 +52,7 @@ func New() *WwiseViewerWindow {
 	wv.setupOpen(toolbar)
 	wv.setupSave(toolbar)
 	wv.setupReplace(toolbar)
+	wv.setupExport(toolbar)
 
 	wv.table = NewTable()
 	wv.selectionIndex = -1
@@ -81,6 +85,7 @@ func (wv *WwiseViewerWindow) openBnk(path string) {
 	}
 	wv.table.UpdateWems(bnk)
 	wv.actionSave.SetEnabled(true)
+	wv.actionExport.SetEnabled(true)
 }
 
 func (wv *WwiseViewerWindow) setupSave(toolbar *widgets.QToolBar) {
@@ -151,6 +156,49 @@ func (wv *WwiseViewerWindow) addReplacement(index int, path string) {
 	wv.table.AddWemReplacement(stat.Name(), r)
 }
 
+func (wv *WwiseViewerWindow) setupExport(toolbar *widgets.QToolBar) {
+	icon := gui.QIcon_FromTheme2("wwise-export",
+		gui.NewQIcon5(rsrcPath+"/export.png"))
+	wv.actionExport = widgets.NewQAction3(icon, "&Export Wems", wv)
+	wv.actionExport.SetEnabled(false)
+	wv.actionExport.ConnectTriggered(func(checked bool) {
+		home := util.UserHome()
+		opts := widgets.QFileDialog__ShowDirsOnly |
+			widgets.QFileDialog__DontResolveSymlinks
+		dir := widgets.QFileDialog_GetExistingDirectory(
+			wv, "Choose directory to unpack into", home, opts)
+		if dir != "" {
+			wv.exportBnk(dir)
+		}
+	})
+	toolbar.QWidget.AddAction(wv.actionExport)
+}
+
+func (wv *WwiseViewerWindow) exportBnk(dir string) {
+	total := int64(0)
+	bnk := wv.table.GetSoundBank()
+	for i, wem := range bnk.DataSection.Wems {
+		filename := util.CanonicalWemName(i, bnk.IndexSection.WemCount)
+		f, err := os.Create(filepath.Join(dir, filename))
+		if err != nil {
+			wv.showExportError(filename, dir, err)
+			return
+		}
+		n, err := io.Copy(f, wem)
+		if err != nil {
+			wv.showExportError(filename, dir, err)
+			return
+		}
+		total += n
+	}
+
+	count := len(bnk.DataSection.Wems)
+	msg := fmt.Sprintf("Successfully exported wems to %s.\n"+
+		"%d wems have been exported.\n"+
+		"%d bytes have been written.", dir, count, total)
+	widgets.QMessageBox_Information(wv, "Save successful", msg, 0, 0)
+}
+
 func (wv *WwiseViewerWindow) onWemSelected(selected *core.QItemSelection,
 	deselected *core.QItemSelection) {
 	// The following is an unfortunate hack. Connecting selection on the
@@ -167,6 +215,13 @@ func (wv *WwiseViewerWindow) onWemSelected(selected *core.QItemSelection,
 		return
 	}
 	wv.actionReplace.SetEnabled(true)
+}
+
+func (wv *WwiseViewerWindow) showExportError(filename string, path string,
+	err error) {
+	msg := fmt.Sprintf("Could not write wem file %s to %s:\n%s.\n"+
+		"Aborting the export operation.", filename, path, err)
+	widgets.QMessageBox_Critical4(wv, errorTitle, msg, 0, 0)
 }
 
 func (wv *WwiseViewerWindow) showSaveError(path string, err error) {
