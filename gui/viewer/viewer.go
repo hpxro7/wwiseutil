@@ -19,7 +19,7 @@ const (
 	errorTitle = "Error encountered"
 )
 
-var fileDialogFilters = strings.Join([]string{
+var supportedFileFilters = strings.Join([]string{
 	"SoundBank files (*.bnk *.nbnk)",
 	"All files (*.*)",
 }, ";;")
@@ -65,8 +65,10 @@ func (wv *WwiseViewerWindow) setupOpen(toolbar *widgets.QToolBar) {
 	wv.actionOpen.ConnectTriggered(func(checked bool) {
 		home := util.UserHome()
 		path := widgets.QFileDialog_GetOpenFileName(
-			wv, "Open file", home, fileDialogFilters, "", 0)
-		wv.openBnk(path)
+			wv, "Open file", home, supportedFileFilters, "", 0)
+		if path != "" {
+			wv.openBnk(path)
+		}
 	})
 	toolbar.QWidget.AddAction(wv.actionOpen)
 }
@@ -77,13 +79,42 @@ func (wv *WwiseViewerWindow) openBnk(path string) {
 		wv.showOpenError(path, err)
 		return
 	}
-	wv.table.UpdateWems(bnk.DataSection)
+	wv.table.UpdateWems(bnk)
+	wv.actionSave.SetEnabled(true)
 }
 
 func (wv *WwiseViewerWindow) setupSave(toolbar *widgets.QToolBar) {
 	icon := gui.QIcon_FromTheme2("wwise-save", gui.NewQIcon5(rsrcPath+"/save.png"))
 	wv.actionSave = widgets.NewQAction3(icon, "&Save", wv)
+	wv.actionSave.SetEnabled(false)
+	wv.actionSave.ConnectTriggered(func(checked bool) {
+		home := util.UserHome()
+		path := widgets.QFileDialog_GetSaveFileName(
+			wv, "Save file", home, supportedFileFilters, "", 0)
+		if path != "" {
+			wv.saveBnk(path)
+		}
+	})
 	toolbar.QWidget.AddAction(wv.actionSave)
+}
+
+func (wv *WwiseViewerWindow) saveBnk(path string) {
+	outputFile, err := os.Create(path)
+	if err != nil {
+		wv.showSaveError(path, err)
+	}
+	count := wv.table.CommitReplacements()
+	bnk := wv.table.GetSoundBank()
+
+	total, err := bnk.WriteTo(outputFile)
+	if err != nil {
+		wv.showSaveError(path, err)
+	}
+
+	msg := fmt.Sprintf("Successfully saved %s.\n"+
+		"%d wems have been replaced.\n"+
+		"%d bytes have been written.", path, count, total)
+	widgets.QMessageBox_Information(wv, "Save successful", msg, 0, 0)
 }
 
 func (wv *WwiseViewerWindow) setupReplace(toolbar *widgets.QToolBar) {
@@ -100,7 +131,9 @@ func (wv *WwiseViewerWindow) setupReplace(toolbar *widgets.QToolBar) {
 		home := util.UserHome()
 		path := widgets.QFileDialog_GetOpenFileName(
 			wv, "Open file", home, wemFileFilters, "", 0)
-		wv.addReplacement(indexes[0].Row(), path)
+		if path != "" {
+			wv.addReplacement(indexes[0].Row(), path)
+		}
 	})
 	toolbar.QWidget.AddAction(wv.actionReplace)
 }
@@ -115,16 +148,16 @@ func (wv *WwiseViewerWindow) addReplacement(index int, path string) {
 		wv.showOpenError(path, err)
 	}
 	r := &bnk.ReplacementWem{wem, index, stat.Size()}
-	wv.table.EditWemReplacement(stat.Name(), r)
+	wv.table.AddWemReplacement(stat.Name(), r)
 }
 
 func (wv *WwiseViewerWindow) onWemSelected(selected *core.QItemSelection,
 	deselected *core.QItemSelection) {
-	// The following is an unfortunate hack. Connectiing selection on the
+	// The following is an unfortunate hack. Connecting selection on the
 	// table causes graphical selection glitches, likely because the original
 	// selection logic was overridden. Since we don't have a way to call the super
 	// class's SelectionChanged, we disable this one (to prevent recursion), call
-	// SelectionChanged, and connect it  back.
+	// SelectionChanged, and connect it back.
 	wv.table.DisconnectSelectionChanged()
 	wv.table.SelectionChanged(selected, deselected)
 	wv.table.ConnectSelectionChanged(wv.onWemSelected)
@@ -134,6 +167,11 @@ func (wv *WwiseViewerWindow) onWemSelected(selected *core.QItemSelection,
 		return
 	}
 	wv.actionReplace.SetEnabled(true)
+}
+
+func (wv *WwiseViewerWindow) showSaveError(path string, err error) {
+	msg := fmt.Sprintf("Could not save file %s:\n%s", path, err)
+	widgets.QMessageBox_Critical4(wv, errorTitle, msg, 0, 0)
 }
 
 func (wv *WwiseViewerWindow) showOpenError(path string, err error) {
