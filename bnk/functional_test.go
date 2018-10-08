@@ -94,6 +94,12 @@ func AssertSoundBankEqualToFile(t *testing.T, f *os.File, bnk *File) {
 	if err != nil {
 		t.Error(err)
 	}
+	actualTotal := int64(len(bnkBytes.Bytes()))
+	if total != actualTotal {
+		t.Errorf("%d bytes were actually written, but only %d bytes were "+
+			"reported to be written", actualTotal, total)
+		return
+	}
 	stat, _ := f.Stat()
 	fileSize := stat.Size()
 	if total != fileSize {
