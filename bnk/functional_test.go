@@ -14,6 +14,10 @@ import (
 const (
 	testDir         = "testdata"
 	simpleSoundBank = "simple.bnk"
+	// This wem is smaller than the wem at index 0 of simpleSoundBank
+	smallerWem = "small.wem"
+	// This wem is larger than the wem at index 0 of simpleSoundBank
+	largerWem = "large.wem"
 )
 
 func TestUnchangedFileIsEqual(t *testing.T) {
@@ -30,6 +34,54 @@ func TestUnchangedFileIsEqual(t *testing.T) {
 		t.Error(err)
 	}
 	AssertSoundBankEqualToFile(t, f, bnk)
+}
+
+func TestReplaceFirstWemWithSmaller(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping large file comparison test.")
+	}
+
+	bnk, err := Open(filepath.Join(testDir, simpleSoundBank))
+	if err != nil {
+		t.Error(err)
+	}
+	wem, err := os.Open(filepath.Join(testDir, smallerWem))
+	if err != nil {
+		t.Error(err)
+	}
+	stat, _ := wem.Stat()
+	bnk.ReplaceWems(&ReplacementWem{wem, 0, stat.Size()})
+
+	expect, err := os.Open(filepath.Join(testDir, "0_replaced_with_smaller.bnk"))
+	if err != nil {
+		t.Error(err)
+	}
+
+	AssertSoundBankEqualToFile(t, expect, bnk)
+}
+
+func TestReplaceFirstWemWithLarger(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping large file comparison test.")
+	}
+
+	bnk, err := Open(filepath.Join(testDir, simpleSoundBank))
+	if err != nil {
+		t.Error(err)
+	}
+	wem, err := os.Open(filepath.Join(testDir, largerWem))
+	if err != nil {
+		t.Error(err)
+	}
+	stat, _ := wem.Stat()
+	bnk.ReplaceWems(&ReplacementWem{wem, 0, stat.Size()})
+
+	expect, err := os.Open(filepath.Join(testDir, "0_replaced_with_larger.bnk"))
+	if err != nil {
+		t.Error(err)
+	}
+
+	AssertSoundBankEqualToFile(t, expect, bnk)
 }
 
 func AssertSoundBankEqualToFile(t *testing.T, f *os.File, bnk *File) {
