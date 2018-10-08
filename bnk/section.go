@@ -28,6 +28,9 @@ var didxHeaderId = [4]byte{'D', 'I', 'D', 'X'}
 // The identifier for the start of the DATA section.
 var dataHeaderId = [4]byte{'D', 'A', 'T', 'A'}
 
+// The identifier for the start of the HIRC section.
+var hircHeaderId = [4]byte{'H', 'I', 'R', 'C'}
+
 // Section represents a single section of a Wwise SoundBank.
 type Section interface {
 	io.WriterTo
@@ -92,6 +95,14 @@ type WemDescriptor struct {
 	Offset uint32
 	// The length in bytes of this wem.
 	Length uint32
+}
+
+// A ObjectHierarchySection represents the HIRC section of a SoundBank file,
+// which contains all wwise metadata objects defining the behavior and
+// properties of wems.
+type ObjectHierarchySection struct {
+	Header          *SectionHeader
+	RemainingReader io.Reader
 }
 
 // An UnknownSection represents an unknown section in a SoundBank file.
@@ -298,6 +309,45 @@ func (data *DataSection) String() string {
 		fmt.Fprintf(b, wemFmt, i+1, desc.Offset, desc.Length, wem.Padding.Size())
 	}
 	return b.String()
+}
+
+// NewObjectHierarchySection creates a new ObjectHierarchySection, reading from
+// sr, which must be seeked to the start of the HIRC section data.
+// It is an error to call this method on a non-HIRC header.
+func (hdr *SectionHeader) NewObjectHierarchySection(sr *io.SectionReader) (*ObjectHierarchySection, error) {
+	if hdr.Identifier != hircHeaderId {
+		panic(fmt.Sprintf("Expected HIRC header but got: %s", hdr.Identifier))
+	}
+	sec := new(ObjectHierarchySection)
+	sec.Header = hdr
+	// Get the offset into the file where the known portion of the HIRC ends.
+	knownOffset, _ := sr.Seek(0, io.SeekCurrent)
+	remaining := int64(hdr.Length)
+	sec.RemainingReader = io.NewSectionReader(sr, knownOffset, remaining)
+	sr.Seek(remaining, io.SeekCurrent)
+
+	return sec, nil
+}
+
+// WriteTo writes the full contents of this ObjectHierarchySection to the Writer
+// specified by w.
+func (hdr *ObjectHierarchySection) WriteTo(w io.Writer) (written int64, err error) {
+	err = binary.Write(w, binary.LittleEndian, hdr.Header)
+	if err != nil {
+		return
+	}
+	written = int64(SECTION_HEADER_BYTES)
+	n, err := io.Copy(w, hdr.RemainingReader)
+	if err != nil {
+		return
+	}
+	written += int64(n)
+	return written, nil
+}
+
+func (hdr *ObjectHierarchySection) String() string {
+	return fmt.Sprintf("%s: len(%d) \n",
+		hdr.Header.Identifier, hdr.Header.Length)
 }
 
 // NewUnknownSection creates a new UnknownSection, reading from sr, which

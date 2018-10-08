@@ -20,6 +20,7 @@ type File struct {
 	BankHeaderSection *BankHeaderSection
 	IndexSection      *DataIndexSection
 	DataSection       *DataSection
+	ObjectSection     *ObjectHierarchySection
 }
 
 // A ReplacementWem defines a wem to be replaced into an original SoundBank File.
@@ -78,6 +79,13 @@ func NewFile(r io.ReaderAt) (*File, error) {
 				return nil, err
 			}
 			bnk.DataSection = sec
+			bnk.sections = append(bnk.sections, sec)
+		case hircHeaderId:
+			sec, err := hdr.NewObjectHierarchySection(sr)
+			if err != nil {
+				return nil, err
+			}
+			bnk.ObjectSection = sec
 			bnk.sections = append(bnk.sections, sec)
 		default:
 			sec, err := hdr.NewUnknownSection(sr)
