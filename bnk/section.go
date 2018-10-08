@@ -19,6 +19,15 @@ const BKHD_SECTION_BYTES = 8
 // entry (a WemDescriptor) within the DIDX section.
 const DIDX_ENTRY_BYTES = 12
 
+// The number of bytes used to describe the count of objects in the HIRC section.
+const OBJECT_COUNT_BYTES = 4
+
+// The number of bytes used to describe the a HIRC object.
+const OBJECT_DESCRIPTOR_BYTES = 9
+
+// The number of bytes used to describe the ID of a HIRC object.
+const OBJECT_DESCRIPTOR_ID_BYTES = 4
+
 // The identifier for the start of the BKHD (Bank Header) section.
 var bkhdHeaderId = [4]byte{'B', 'K', 'H', 'D'}
 
@@ -97,12 +106,34 @@ type WemDescriptor struct {
 	Length uint32
 }
 
+// Object represents a single object within the HIRC section.
+type Object interface {
+	io.WriterTo
+	fmt.Stringer
+}
+
 // A ObjectHierarchySection represents the HIRC section of a SoundBank file,
 // which contains all wwise metadata objects defining the behavior and
 // properties of wems.
 type ObjectHierarchySection struct {
-	Header          *SectionHeader
-	RemainingReader io.Reader
+	Header      *SectionHeader
+	ObjectCount uint32
+	objects     []Object
+}
+
+// A ObjectDescriptor describes a single object within a HIRC section.
+type ObjectDescriptor struct {
+	Type byte
+	// The length in bytes of the id and data portion of this object.
+	Length   uint32
+	ObjectId uint32
+}
+
+// An UnknownObject represents an unknown object within the HIRC.
+type UnknownObject struct {
+	Descriptor *ObjectDescriptor
+	// A reader to read the data of this section.
+	Reader io.Reader
 }
 
 // An UnknownSection represents an unknown section in a SoundBank file.
@@ -320,34 +351,98 @@ func (hdr *SectionHeader) NewObjectHierarchySection(sr *io.SectionReader) (*Obje
 	}
 	sec := new(ObjectHierarchySection)
 	sec.Header = hdr
-	// Get the offset into the file where the known portion of the HIRC ends.
-	knownOffset, _ := sr.Seek(0, io.SeekCurrent)
-	remaining := int64(hdr.Length)
-	sec.RemainingReader = io.NewSectionReader(sr, knownOffset, remaining)
-	sr.Seek(remaining, io.SeekCurrent)
+
+	var count uint32
+	err := binary.Read(sr, binary.LittleEndian, &count)
+	if err != nil {
+		return nil, err
+	}
+	sec.ObjectCount = count
+
+	for i := uint32(0); i < sec.ObjectCount; i++ {
+		desc := new(ObjectDescriptor)
+		err := binary.Read(sr, binary.LittleEndian, desc)
+		if err != nil {
+			return nil, err
+		}
+		obj, err := desc.NewUnknownObject(sr)
+		sec.objects = append(sec.objects, obj)
+	}
 
 	return sec, nil
 }
 
 // WriteTo writes the full contents of this ObjectHierarchySection to the Writer
 // specified by w.
-func (hdr *ObjectHierarchySection) WriteTo(w io.Writer) (written int64, err error) {
-	err = binary.Write(w, binary.LittleEndian, hdr.Header)
+func (hrc *ObjectHierarchySection) WriteTo(w io.Writer) (written int64, err error) {
+	err = binary.Write(w, binary.LittleEndian, hrc.Header)
 	if err != nil {
 		return
 	}
 	written = int64(SECTION_HEADER_BYTES)
-	n, err := io.Copy(w, hdr.RemainingReader)
+
+	err = binary.Write(w, binary.LittleEndian, hrc.ObjectCount)
 	if err != nil {
 		return
 	}
-	written += int64(n)
+	written += int64(OBJECT_COUNT_BYTES)
+
+	for _, obj := range hrc.objects {
+		n, err := obj.WriteTo(w)
+		if err != nil {
+			return written, err
+		}
+		written += int64(n)
+	}
 	return written, nil
 }
 
-func (hdr *ObjectHierarchySection) String() string {
-	return fmt.Sprintf("%s: len(%d) \n",
-		hdr.Header.Identifier, hdr.Header.Length)
+func (hrc *ObjectHierarchySection) String() string {
+	b := new(strings.Builder)
+
+	fmt.Fprintf(b, "%s: len(%d) object_count(%d) \n",
+		hrc.Header.Identifier, hrc.Header.Length, hrc.ObjectCount)
+
+	for _, obj := range hrc.objects {
+		b.WriteString(obj.String())
+	}
+
+	return b.String()
+}
+
+// NewUnknownObject creates a new UnknownObject, reading from sr, which must
+// be seeked to the start of the unknown object's data.
+func (desc *ObjectDescriptor) NewUnknownObject(sr *io.SectionReader) (*UnknownObject, error) {
+	// Get the offset into the file where the data portion of this object begins.
+	dataOffset, _ := sr.Seek(0, io.SeekCurrent)
+	// The descriptor length includes the Object ID, which has already been
+	// written. Remove this from the remaining length
+	dataLength := int64(desc.Length) - OBJECT_DESCRIPTOR_ID_BYTES
+	r := io.NewSectionReader(sr, dataOffset, dataLength)
+	sr.Seek(dataLength, io.SeekCurrent)
+	return &UnknownObject{desc, r}, nil
+}
+
+// WriteTo writes the full contents of this UnknownObject to the Writer
+// specified by w.
+func (unknown *UnknownObject) WriteTo(w io.Writer) (written int64, err error) {
+	err = binary.Write(w, binary.LittleEndian, unknown.Descriptor)
+	if err != nil {
+		return
+	}
+	written = int64(OBJECT_DESCRIPTOR_BYTES)
+
+	n, err := io.Copy(w, unknown.Reader)
+	if err != nil {
+		return written, err
+	}
+	written += int64(n)
+
+	return written, nil
+}
+
+func (unknown *UnknownObject) String() string {
+	return ""
 }
 
 // NewUnknownSection creates a new UnknownSection, reading from sr, which
