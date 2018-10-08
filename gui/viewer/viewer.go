@@ -26,6 +26,12 @@ var supportedFileFilters = strings.Join([]string{
 	"All files (*.*)",
 }, ";;")
 
+var saveFileFilters = strings.Join([]string{
+	"MHW SoundBank file (*.nbnk)",
+	"SoundBank file (*.bnk)",
+	"All files (*.*)",
+}, ";;")
+
 var wemFileFilters = strings.Join([]string{
 	"Wem files (*.wem)",
 }, ";;")
@@ -95,7 +101,7 @@ func (wv *WwiseViewerWindow) setupSave(toolbar *widgets.QToolBar) {
 	wv.actionSave.ConnectTriggered(func(checked bool) {
 		home := util.UserHome()
 		path := widgets.QFileDialog_GetSaveFileName(
-			wv, "Save file", home, supportedFileFilters, "", 0)
+			wv, "Save file", home, saveFileFilters, "", 0)
 		if path != "" {
 			wv.saveBnk(path)
 		}
