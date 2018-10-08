@@ -28,6 +28,12 @@ var didxHeaderId = [4]byte{'D', 'I', 'D', 'X'}
 // The identifier for the start of the DATA section.
 var dataHeaderId = [4]byte{'D', 'A', 'T', 'A'}
 
+// Section represents a single section of a Wwise SoundBank.
+type Section interface {
+	io.WriterTo
+	fmt.Stringer
+}
+
 // A SectionHeader represents a single Wwise SoundBank header.
 type SectionHeader struct {
 	Identifier [4]byte

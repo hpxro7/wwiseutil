@@ -13,11 +13,13 @@ import (
 
 // A File represents an open Wwise SoundBank.
 type File struct {
-	closer            io.Closer
+	closer io.Closer
+	// The list of sections in this SoundBank, in the order that they are expected
+	// to be found in the file.
+	sections          []Section
 	BankHeaderSection *BankHeaderSection
 	IndexSection      *DataIndexSection
 	DataSection       *DataSection
-	Others            []*UnknownSection
 }
 
 // A ReplacementWem defines a wem to be replaced into an original SoundBank File.
@@ -62,24 +64,27 @@ func NewFile(r io.ReaderAt) (*File, error) {
 				return nil, err
 			}
 			bnk.BankHeaderSection = sec
+			bnk.sections = append(bnk.sections, sec)
 		case didxHeaderId:
 			sec, err := hdr.NewDataIndexSection(sr)
 			if err != nil {
 				return nil, err
 			}
 			bnk.IndexSection = sec
+			bnk.sections = append(bnk.sections, sec)
 		case dataHeaderId:
 			sec, err := hdr.NewDataSection(sr, bnk.IndexSection)
 			if err != nil {
 				return nil, err
 			}
 			bnk.DataSection = sec
+			bnk.sections = append(bnk.sections, sec)
 		default:
 			sec, err := hdr.NewUnknownSection(sr)
 			if err != nil {
 				return nil, err
 			}
-			bnk.Others = append(bnk.Others, sec)
+			bnk.sections = append(bnk.sections, sec)
 		}
 	}
 
@@ -92,28 +97,14 @@ func NewFile(r io.ReaderAt) (*File, error) {
 
 // WriteTo writes the full contents of this File to the Writer specified by w.
 func (bnk *File) WriteTo(w io.Writer) (written int64, err error) {
-	written, err = bnk.BankHeaderSection.WriteTo(w)
-	if err != nil {
-		return
-	}
-	n, err := bnk.IndexSection.WriteTo(w)
-	if err != nil {
-		return
-	}
-	written += n
-	n, err = bnk.DataSection.WriteTo(w)
-	if err != nil {
-		return
-	}
-	written += n
-	for _, other := range bnk.Others {
-		n, err = other.WriteTo(w)
+	for _, s := range bnk.sections {
+		n, err := s.WriteTo(w)
 		if err != nil {
-			return
+			return written, err
 		}
 		written += n
 	}
-	return written, err
+	return
 }
 
 // Open opens the File at the specified path using os.Open and prepares it for
@@ -206,11 +197,7 @@ func (bnk *File) ReplaceWems(rs ...*ReplacementWem) {
 func (bnk *File) String() string {
 	b := new(strings.Builder)
 
-	b.WriteString(bnk.BankHeaderSection.String())
-	b.WriteString(bnk.IndexSection.String())
-	b.WriteString(bnk.DataSection.String())
-
-	for _, sec := range bnk.Others {
+	for _, sec := range bnk.sections {
 		b.WriteString(sec.String())
 	}
 
