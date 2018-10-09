@@ -14,6 +14,7 @@ const OBJECT_DESCRIPTOR_ID_BYTES = 4
 
 const SOUND_DESCRIPTOR_BYTES = 16
 const OPTIONAL_WEM_DESCRIPTOR_BYTES = 8
+const EFFECT_BYTES = 7
 
 // The identifier for SFX or Voice sound objects.
 const soundObjectId = 0x02
@@ -42,9 +43,8 @@ type SfxVoiceSoundObject struct {
 	SoundDescriptor *SoundObjectDescriptor
 	WemDescriptor   *OptionalWemDescriptor
 	// Determines whether this sound object is a SFX or Voice type.
-	Type byte
-	// A reader to read the remaining data of this section.
-	RemainingReader io.Reader
+	Type      byte
+	Structure *SoundStructure
 }
 
 // A SoundObjectDescriptor describes the location and properties of a sound
@@ -78,6 +78,30 @@ type UnknownObject struct {
 	Reader io.Reader
 }
 
+// A SoundStructure describes a variety of properties that define how an audio
+// object should be played.
+type SoundStructure struct {
+	OverrideParentEffects bool
+	EffectContainer       *EffectContainer
+	// A reader to read the remaining data of this structure.
+	RemainingReader io.Reader
+}
+
+// An EffectsContainer describes a set of effects applied to an audio object.
+type EffectContainer struct {
+	EffectCount byte
+	// A bit mask specifying which effects are bypassed.
+	Bypass  byte
+	Effects []*Effect
+}
+
+// An Effect describes the type of effect applied to an audio object.
+type Effect struct {
+	Index   byte
+	Id      uint32
+	padding [2]byte
+}
+
 // NewSfxVoiceSoundObject creates a new SfxVoiceSoundObject, reading from sr,
 // which must be seeked to the start of the object's data.
 func (desc *ObjectDescriptor) NewSfxVoiceSoundObject(sr *io.SectionReader) (*SfxVoiceSoundObject, error) {
@@ -86,7 +110,6 @@ func (desc *ObjectDescriptor) NewSfxVoiceSoundObject(sr *io.SectionReader) (*Sfx
 	// The descriptor length includes the Object ID, which has already been
 	// written. Remove this from the remaining length.
 	dataLength := int64(desc.Length) - OBJECT_DESCRIPTOR_ID_BYTES
-	//fmt.Print("TO READ:", dataLength)
 	sd := new(SoundObjectDescriptor)
 	err := binary.Read(sr, binary.LittleEndian, sd)
 	if err != nil {
@@ -108,14 +131,15 @@ func (desc *ObjectDescriptor) NewSfxVoiceSoundObject(sr *io.SectionReader) (*Sfx
 		return nil, err
 	}
 
-	// The start offset of the sound structure.
 	ssOffset, _ := sr.Seek(0, io.SeekCurrent)
-	//fmt.Print(" . Read:", ssOffset-startOffset)
 	remaining := dataLength - (ssOffset - startOffset)
-	//fmt.Println(" . Remaining:", remaining)
-	r := io.NewSectionReader(sr, ssOffset, remaining)
-	sr.Seek(remaining, io.SeekCurrent)
-	return &SfxVoiceSoundObject{desc, sd, wd, soundType, r}, nil
+
+	ss, err := NewSoundStructure(sr, remaining)
+	if err != nil {
+		return nil, err
+	}
+
+	return &SfxVoiceSoundObject{desc, sd, wd, soundType, ss}, nil
 }
 
 // WriteTo writes the full contents of this SfxVoiceSoundObject to the Writer
@@ -125,33 +149,33 @@ func (sound *SfxVoiceSoundObject) WriteTo(w io.Writer) (written int64, err error
 	if err != nil {
 		return
 	}
-	written = int64(OBJECT_DESCRIPTOR_BYTES)
+	written = OBJECT_DESCRIPTOR_BYTES
 
 	err = binary.Write(w, binary.LittleEndian, sound.SoundDescriptor)
 	if err != nil {
 		return
 	}
-	written += int64(SOUND_DESCRIPTOR_BYTES)
+	written += SOUND_DESCRIPTOR_BYTES
 
 	if sound.SoundDescriptor.StreamSetting == streamSettingEmbedded {
 		err = binary.Write(w, binary.LittleEndian, sound.WemDescriptor)
 		if err != nil {
 			return
 		}
-		written += int64(OPTIONAL_WEM_DESCRIPTOR_BYTES)
+		written += OPTIONAL_WEM_DESCRIPTOR_BYTES
 	}
 
 	err = binary.Write(w, binary.LittleEndian, sound.Type)
 	if err != nil {
 		return
 	}
-	written += int64(1)
+	written += 1
 
-	n, err := io.Copy(w, sound.RemainingReader)
+	n, err := sound.Structure.WriteTo(w)
 	if err != nil {
 		return written, err
 	}
-	written += int64(n)
+	written += n
 
 	return written, nil
 }
@@ -185,4 +209,103 @@ func (unknown *UnknownObject) WriteTo(w io.Writer) (written int64, err error) {
 	written += int64(n)
 
 	return written, nil
+}
+
+// NewSoundStructure creates a new SoundStructure, reading from sr, which must be
+// seeked to the start of the structure's data.
+func NewSoundStructure(sr *io.SectionReader, length int64) (*SoundStructure, error) {
+	// Get the offset into the file where the structure begins.
+	startOffset, _ := sr.Seek(0, io.SeekCurrent)
+	var override bool
+	err := binary.Read(sr, binary.LittleEndian, &override)
+	if err != nil {
+		return nil, err
+	}
+
+	container, err := NewEffectContainer(sr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a reader over the remaining elements in this object, then seek past
+	// it.
+	currOffset, _ := sr.Seek(0, io.SeekCurrent)
+	remaining := length - (currOffset - startOffset)
+	r := io.NewSectionReader(sr, currOffset, remaining)
+	sr.Seek(remaining, io.SeekCurrent)
+	return &SoundStructure{override, container, r}, nil
+}
+
+func (ss *SoundStructure) WriteTo(w io.Writer) (written int64, err error) {
+	err = binary.Write(w, binary.LittleEndian, ss.OverrideParentEffects)
+	if err != nil {
+		return
+	}
+	written = int64(1)
+
+	n, err := ss.EffectContainer.WriteTo(w)
+	if err != nil {
+		return
+	}
+	written += n
+
+	n, err = io.Copy(w, ss.RemainingReader)
+	if err != nil {
+		return written, err
+	}
+	written += n
+
+	return written, nil
+}
+
+// NewEffectContainer creates a new EffectContainer, reading from sr, which must
+// be seeked to the start of the container.
+func NewEffectContainer(sr *io.SectionReader) (*EffectContainer, error) {
+	var count byte
+	err := binary.Read(sr, binary.LittleEndian, &count)
+	if err != nil {
+		return nil, err
+	}
+	var bypass byte
+	var effects []*Effect
+	if count > 0 {
+		err := binary.Read(sr, binary.LittleEndian, &bypass)
+		if err != nil {
+			return nil, err
+		}
+
+		for i := byte(0); i < count; i++ {
+			effect := new(Effect)
+			err := binary.Read(sr, binary.LittleEndian, effect)
+			if err != nil {
+				return nil, err
+			}
+			effects = append(effects, effect)
+		}
+	}
+	return &EffectContainer{count, bypass, effects}, nil
+}
+
+func (e *EffectContainer) WriteTo(w io.Writer) (written int64, err error) {
+	err = binary.Write(w, binary.LittleEndian, e.EffectCount)
+	if err != nil {
+		return
+	}
+	written = 1
+
+	if e.EffectCount > 0 {
+		err = binary.Write(w, binary.LittleEndian, e.Bypass)
+		if err != nil {
+			return
+		}
+		written += 1
+		for effect := range e.Effects {
+			err = binary.Write(w, binary.LittleEndian, effect)
+			if err != nil {
+				return
+			}
+			written += EFFECT_BYTES
+		}
+	}
+	return
 }
