@@ -299,7 +299,7 @@ func (e *EffectContainer) WriteTo(w io.Writer) (written int64, err error) {
 			return
 		}
 		written += 1
-		for effect := range e.Effects {
+		for _, effect := range e.Effects {
 			err = binary.Write(w, binary.LittleEndian, effect)
 			if err != nil {
 				return
