@@ -338,8 +338,20 @@ func (hdr *SectionHeader) NewObjectHierarchySection(sr *io.SectionReader) (*Obje
 		if err != nil {
 			return nil, err
 		}
-		obj, err := desc.NewUnknownObject(sr)
-		sec.objects = append(sec.objects, obj)
+		switch id := desc.Type; id {
+		case soundObjectId:
+			obj, err := desc.NewSfxVoiceSoundObject(sr)
+			if err != nil {
+				return nil, err
+			}
+			sec.objects = append(sec.objects, obj)
+		default:
+			obj, err := desc.NewUnknownObject(sr)
+			if err != nil {
+				return nil, err
+			}
+			sec.objects = append(sec.objects, obj)
+		}
 	}
 
 	return sec, nil
@@ -375,11 +387,6 @@ func (hrc *ObjectHierarchySection) String() string {
 
 	fmt.Fprintf(b, "%s: len(%d) object_count(%d) \n",
 		hrc.Header.Identifier, hrc.Header.Length, hrc.ObjectCount)
-
-	for _, obj := range hrc.objects {
-		b.WriteString(obj.String())
-	}
-
 	return b.String()
 }
 
