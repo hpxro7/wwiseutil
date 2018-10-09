@@ -99,7 +99,7 @@ type EffectContainer struct {
 type Effect struct {
 	Index   byte
 	Id      uint32
-	padding [2]byte
+	Padding [2]byte
 }
 
 // NewSfxVoiceSoundObject creates a new SfxVoiceSoundObject, reading from sr,
