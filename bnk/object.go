@@ -12,7 +12,8 @@ const OBJECT_DESCRIPTOR_BYTES = 9
 // The number of bytes used to describe the ID of a HIRC object.
 const OBJECT_DESCRIPTOR_ID_BYTES = 4
 
-const SOUND_DESCRIPTOR_BYTES = 16
+const OVERRIDE_EFFECTS_BYTES = 1
+const SFX_UNKNOWN_BYTES = 5
 const OPTIONAL_WEM_DESCRIPTOR_BYTES = 8
 const EFFECT_BYTES = 7
 
@@ -40,34 +41,22 @@ type ObjectDescriptor struct {
 type SfxVoiceSoundObject struct {
 	Descriptor *ObjectDescriptor
 
-	SoundDescriptor *SoundObjectDescriptor
-	WemDescriptor   *OptionalWemDescriptor
+	Unknown       *[5]byte
+	WemDescriptor *OptionalWemDescriptor
 	// Determines whether this sound object is a SFX or Voice type.
-	Type      byte
+	Type byte
+
 	Structure *SoundStructure
 }
 
-// A SoundObjectDescriptor describes the location and properties of a sound
-// object.
-type SoundObjectDescriptor struct {
-	Unknown [4]byte
-	// Determines whether the sound is embedded is the SoundBank or streamed.
-	StreamSetting uint32
-	AudioId       uint32
-	// If the file is embedded, this will be the source SoundBank id from the STID
-	// section. If the file is being streamed, this will be the same as AudioId.
-	SourceId uint32
-}
-
 // A OptionalWemDescriptor provides information about where a wem is stored from
-// a SfxVoiceSourceObject. This will only be in the SoundObject if the sound
-// is not streamed.
+// a SfxVoiceSourceObject. If the audio is streamed, this struct will still be
+// read in, but it is unknown what its values correspond to.
 type OptionalWemDescriptor struct {
-	// If the sound is embedded, this will be offset of the wem from the start of
-	// the file. If not, it will not exist.
-	OptionalWemOffset uint32
-	// If the sound is embedded, this will be length of the wem. If not, it will
-	// not exist.
+	// This will be id of the wem referred to by this object.
+	OptionalWemId uint32
+	// If the sound is embedded, this will be length of the wem. If not, it is an
+	// unknown number.
 	OptionalWemLength uint32
 }
 
@@ -81,7 +70,7 @@ type UnknownObject struct {
 // A SoundStructure describes a variety of properties that define how an audio
 // object should be played.
 type SoundStructure struct {
-	OverrideParentEffects bool
+	OverrideParentEffects byte
 	EffectContainer       *EffectContainer
 	// A reader to read the remaining data of this structure.
 	RemainingReader io.Reader
@@ -110,22 +99,19 @@ func (desc *ObjectDescriptor) NewSfxVoiceSoundObject(sr *io.SectionReader) (*Sfx
 	// The descriptor length includes the Object ID, which has already been
 	// written. Remove this from the remaining length.
 	dataLength := int64(desc.Length) - OBJECT_DESCRIPTOR_ID_BYTES
-	sd := new(SoundObjectDescriptor)
-	err := binary.Read(sr, binary.LittleEndian, sd)
+	unknown := new([5]byte)
+	err := binary.Read(sr, binary.LittleEndian, unknown)
 	if err != nil {
 		return nil, err
 	}
-	var wd *OptionalWemDescriptor
-	if sd.StreamSetting == streamSettingEmbedded {
-		wd = new(OptionalWemDescriptor)
-		err := binary.Read(sr, binary.LittleEndian, wd)
-		if err != nil {
-			return nil, err
-		}
+
+	wd := new(OptionalWemDescriptor)
+	err = binary.Read(sr, binary.LittleEndian, wd)
+	if err != nil {
+		return nil, err
 	}
 
 	var soundType byte
-	wd = new(OptionalWemDescriptor)
 	err = binary.Read(sr, binary.LittleEndian, &soundType)
 	if err != nil {
 		return nil, err
@@ -139,7 +125,7 @@ func (desc *ObjectDescriptor) NewSfxVoiceSoundObject(sr *io.SectionReader) (*Sfx
 		return nil, err
 	}
 
-	return &SfxVoiceSoundObject{desc, sd, wd, soundType, ss}, nil
+	return &SfxVoiceSoundObject{desc, unknown, wd, soundType, ss}, nil
 }
 
 // WriteTo writes the full contents of this SfxVoiceSoundObject to the Writer
@@ -151,19 +137,17 @@ func (sound *SfxVoiceSoundObject) WriteTo(w io.Writer) (written int64, err error
 	}
 	written = OBJECT_DESCRIPTOR_BYTES
 
-	err = binary.Write(w, binary.LittleEndian, sound.SoundDescriptor)
+	err = binary.Write(w, binary.LittleEndian, sound.Unknown)
 	if err != nil {
 		return
 	}
-	written += SOUND_DESCRIPTOR_BYTES
+	written += SFX_UNKNOWN_BYTES
 
-	if sound.SoundDescriptor.StreamSetting == streamSettingEmbedded {
-		err = binary.Write(w, binary.LittleEndian, sound.WemDescriptor)
-		if err != nil {
-			return
-		}
-		written += OPTIONAL_WEM_DESCRIPTOR_BYTES
+	err = binary.Write(w, binary.LittleEndian, sound.WemDescriptor)
+	if err != nil {
+		return
 	}
+	written += OPTIONAL_WEM_DESCRIPTOR_BYTES
 
 	err = binary.Write(w, binary.LittleEndian, sound.Type)
 	if err != nil {
@@ -216,7 +200,7 @@ func (unknown *UnknownObject) WriteTo(w io.Writer) (written int64, err error) {
 func NewSoundStructure(sr *io.SectionReader, length int64) (*SoundStructure, error) {
 	// Get the offset into the file where the structure begins.
 	startOffset, _ := sr.Seek(0, io.SeekCurrent)
-	var override bool
+	var override byte
 	err := binary.Read(sr, binary.LittleEndian, &override)
 	if err != nil {
 		return nil, err
@@ -241,7 +225,7 @@ func (ss *SoundStructure) WriteTo(w io.Writer) (written int64, err error) {
 	if err != nil {
 		return
 	}
-	written = int64(1)
+	written = OVERRIDE_EFFECTS_BYTES
 
 	n, err := ss.EffectContainer.WriteTo(w)
 	if err != nil {
@@ -266,6 +250,7 @@ func NewEffectContainer(sr *io.SectionReader) (*EffectContainer, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	var bypass byte
 	var effects []*Effect
 	if count > 0 {
