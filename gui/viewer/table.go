@@ -175,8 +175,7 @@ func (m *WemModel) wemLoops(index int) string {
 	}
 
 	desc := m.bnk.DataSection.Wems[index].Descriptor
-	opt := bnk.OptionalWemDescriptor{WemId: desc.WemId, WemLength: desc.Length}
-	loopCount, ok := m.bnk.ObjectSection.LoopOf[opt]
+	loopCount, ok := m.bnk.ObjectSection.LoopOf[desc.WemId]
 	if ok {
 		if loopCount == bnk.InfiniteLoops {
 			str = "Infinity"

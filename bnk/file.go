@@ -220,10 +220,9 @@ func (bnk *File) String() string {
 
 	for i, wem := range bnk.DataSection.Wems {
 		desc := wem.Descriptor
-		opt := OptionalWemDescriptor{desc.WemId, desc.Length}
 		loop := -1
 		if bnk.ObjectSection != nil {
-			cnt, ok := bnk.ObjectSection.LoopOf[opt]
+			cnt, ok := bnk.ObjectSection.LoopOf[desc.WemId]
 			if ok {
 				loop = int(cnt)
 			}
