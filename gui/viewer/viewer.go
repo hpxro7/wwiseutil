@@ -52,13 +52,20 @@ func New() *WwiseViewerWindow {
 	wv := NewWwiseViewerWindow(nil, 0)
 	wv.SetWindowTitle(core.QCoreApplication_ApplicationName())
 
-	toolbar := wv.AddToolBar3("MainToolbar")
-	toolbar.SetToolButtonStyle(core.Qt__ToolButtonTextBesideIcon)
+	tb := wv.AddToolBar3("Main Toolbar")
+	tb.SetToolButtonStyle(core.Qt__ToolButtonTextBesideIcon)
+	tb.SetAllowedAreas(core.Qt__TopToolBarArea | core.Qt__BottomToolBarArea)
 
-	wv.setupOpen(toolbar)
-	wv.setupSave(toolbar)
-	wv.setupReplace(toolbar)
-	wv.setupExport(toolbar)
+	wv.setupOpen(tb)
+	wv.setupSave(tb)
+	wv.setupReplace(tb)
+	wv.setupExport(tb)
+
+	tb.AddSeparator()
+	wv.AddToolBarBreak(core.Qt__TopToolBarArea)
+
+	ltb := wv.setupLoopOptionsToolbar()
+	wv.AddToolBar2(ltb)
 
 	wv.table = NewTable()
 	wv.selectionIndex = -1
@@ -178,6 +185,32 @@ func (wv *WwiseViewerWindow) setupExport(toolbar *widgets.QToolBar) {
 		}
 	})
 	toolbar.QWidget.AddAction(wv.actionExport)
+}
+
+func (wv *WwiseViewerWindow) setupLoopOptionsToolbar() *widgets.QToolBar {
+	ltb := widgets.NewQToolBar("Loop Toolbar", nil)
+	ltb.SetToolButtonStyle(core.Qt__ToolButtonTextOnly)
+
+	checkboxLoop := widgets.NewQCheckBox2("&Loop", wv)
+	checkboxInfinity := widgets.NewQCheckBox2("&Infinity", wv)
+	lineEditValue := widgets.NewQLineEdit(wv)
+	lineEditValue.SetPlaceholderText("Times to loop")
+	lineEditValue.SetMaximumWidth(90)
+	lineEditValue.SetMaxLength(10)
+
+	actionSetLoop := widgets.NewQAction2("Set &Loop", wv)
+	actionSetLoop.ConnectTriggered(func(checked bool) {
+
+	})
+
+	ltb.AddWidget(checkboxLoop)
+	ltb.AddWidget(checkboxInfinity)
+	ltb.AddWidget(lineEditValue)
+	ltb.QWidget.AddAction(actionSetLoop)
+	ltb.AddSeparator()
+	ltb.SetEnabled(false)
+
+	return ltb
 }
 
 func (wv *WwiseViewerWindow) exportBnk(dir string) {
