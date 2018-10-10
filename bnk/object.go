@@ -271,6 +271,8 @@ func NewEffectContainer(sr *io.SectionReader) (*EffectContainer, error) {
 	return &EffectContainer{count, bypass, effects}, nil
 }
 
+// WriteTo writes the full contents of this EffectContainer to the Writer
+// specified by w.
 func (e *EffectContainer) WriteTo(w io.Writer) (written int64, err error) {
 	err = binary.Write(w, binary.LittleEndian, e.EffectCount)
 	if err != nil {
