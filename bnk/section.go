@@ -108,7 +108,7 @@ type ObjectHierarchySection struct {
 	ObjectCount uint32
 	objects     []Object
 	// A convenience field for accessing the loop parameters of every wem.
-	wemLoopMap map[OptionalWemDescriptor]uint32
+	loopOf map[OptionalWemDescriptor]uint32
 }
 
 // An UnknownSection represents an unknown section in a SoundBank file.
@@ -300,21 +300,7 @@ func (data *DataSection) WriteTo(w io.Writer) (written int64, err error) {
 }
 
 func (data *DataSection) String() string {
-	b := new(strings.Builder)
-	fmt.Fprintf(b, "%s: len(%d)\n", data.Header.Identifier, data.Header.Length)
-
-	tableParams := []string{"%-7", "%-15", "%-15", "%-8", "\n"}
-	titleFmt := strings.Join(tableParams, "s|")
-	wemFmt := strings.Join(tableParams, "d|")
-	title := fmt.Sprintf(titleFmt, "Index", "Offset", "Length", "Padding")
-	fmt.Fprint(b, title)
-	fmt.Fprintln(b, strings.Repeat("-", len(title)-1))
-
-	for i, wem := range data.Wems {
-		desc := wem.Descriptor
-		fmt.Fprintf(b, wemFmt, i+1, desc.Offset, desc.Length, wem.Padding.Size())
-	}
-	return b.String()
+	return fmt.Sprintf("%s: len(%d)\n", data.Header.Identifier, data.Header.Length)
 }
 
 // NewObjectHierarchySection creates a new ObjectHierarchySection, reading from
@@ -326,7 +312,7 @@ func (hdr *SectionHeader) NewObjectHierarchySection(sr *io.SectionReader) (*Obje
 	}
 	sec := new(ObjectHierarchySection)
 	sec.Header = hdr
-	sec.wemLoopMap = make(map[OptionalWemDescriptor]uint32)
+	sec.loopOf = make(map[OptionalWemDescriptor]uint32)
 
 	var count uint32
 	err := binary.Read(sr, binary.LittleEndian, &count)
@@ -349,7 +335,7 @@ func (hdr *SectionHeader) NewObjectHierarchySection(sr *io.SectionReader) (*Obje
 			}
 
 			if obj.Structure.loops {
-				sec.wemLoopMap[*(obj.WemDescriptor)] = obj.Structure.loopCount
+				sec.loopOf[obj.WemDescriptor] = obj.Structure.loopCount
 			}
 			sec.objects = append(sec.objects, obj)
 		default:

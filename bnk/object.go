@@ -46,7 +46,7 @@ type SfxVoiceSoundObject struct {
 	Descriptor *ObjectDescriptor
 
 	Unknown       *[5]byte
-	WemDescriptor *OptionalWemDescriptor
+	WemDescriptor OptionalWemDescriptor
 	// Determines whether this sound object is a SFX or Voice type.
 	Type byte
 
@@ -58,10 +58,10 @@ type SfxVoiceSoundObject struct {
 // read in, but it is unknown what its values correspond to.
 type OptionalWemDescriptor struct {
 	// This will be id of the wem referred to by this object.
-	OptionalWemId uint32
+	WemId uint32
 	// If the sound is embedded, this will be length of the wem. If not, it is an
 	// unknown number.
-	OptionalWemLength uint32
+	WemLength uint32
 }
 
 // An UnknownObject represents an unknown object within the HIRC.
@@ -118,8 +118,8 @@ func (desc *ObjectDescriptor) NewSfxVoiceSoundObject(sr *io.SectionReader) (*Sfx
 		return nil, err
 	}
 
-	wd := new(OptionalWemDescriptor)
-	err = binary.Read(sr, binary.LittleEndian, wd)
+	wd := OptionalWemDescriptor{}
+	err = binary.Read(sr, binary.LittleEndian, &wd)
 	if err != nil {
 		return nil, err
 	}

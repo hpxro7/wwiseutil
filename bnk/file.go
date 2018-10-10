@@ -4,6 +4,7 @@ package bnk
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"os"
@@ -207,6 +208,26 @@ func (bnk *File) String() string {
 
 	for _, sec := range bnk.sections {
 		b.WriteString(sec.String())
+	}
+
+	tableParams := []string{"%-7", "%-15", "%-15", "%-8", "%-12", "\n"}
+	titleFmt := strings.Join(tableParams, "s|")
+	wemFmt := strings.Join(tableParams, "d|")
+	title := fmt.Sprintf(titleFmt,
+		"Index", "Offset", "Length", "Padding", "Loop (0=Inf)")
+	fmt.Fprint(b, title)
+	fmt.Fprintln(b, strings.Repeat("-", len(title)-1))
+
+	for i, wem := range bnk.DataSection.Wems {
+		desc := wem.Descriptor
+		opt := OptionalWemDescriptor{desc.WemId, desc.Length}
+		loop := -1
+		cnt, ok := bnk.ObjectSection.loopOf[opt]
+		if ok {
+			loop = int(cnt)
+		}
+		fmt.Fprintf(b, wemFmt, i+1, desc.Offset, desc.Length, wem.Padding.Size(),
+			loop)
 	}
 
 	return b.String()
