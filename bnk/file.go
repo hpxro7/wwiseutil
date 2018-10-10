@@ -12,6 +12,9 @@ import (
 	"strings"
 )
 
+// A LoopValue identifier for looping infinite times.
+const InfiniteLoops = 0
+
 // A File represents an open Wwise SoundBank.
 type File struct {
 	closer io.Closer
@@ -41,6 +44,15 @@ type ReplacementWems []*ReplacementWem
 // ReplacementWems in ascending order of their WemIndex.
 type ByWemIndex struct {
 	ReplacementWems
+}
+
+// LoopValue describes the loop parameters of a given audio object.
+type LoopValue struct {
+	// True if this audio object loops; and false if otherwise.
+	Loops bool
+	// The number of times this audio track will play. 0 means that this audio will
+	// play infinite times. This value is not vaild if loops is false.
+	Value uint32
 }
 
 // NewFile creates a new File for access Wwise SoundBank files. The file is
@@ -203,6 +215,28 @@ func (bnk *File) ReplaceWems(rs ...*ReplacementWem) {
 	}
 }
 
+// LoopOf returns the loop value of the wem stored in this SoundBank at index i.
+// Returns a default LoopValue{false, 0} if the index is invalid.
+func (bnk *File) LoopOf(i int) LoopValue {
+	value := LoopValue{false, 0}
+	if bnk.DataSection == nil {
+		return value
+	}
+
+	wems := bnk.DataSection.Wems
+	if i < 0 || i >= len(wems) {
+		return value
+	}
+
+	desc := bnk.DataSection.Wems[i].Descriptor
+	if bnk.ObjectSection == nil {
+		return value
+	}
+
+	cnt, ok := bnk.ObjectSection.loopOf[desc.WemId]
+	return LoopValue{ok, cnt}
+}
+
 func (bnk *File) String() string {
 	b := new(strings.Builder)
 
@@ -220,13 +254,12 @@ func (bnk *File) String() string {
 
 	for i, wem := range bnk.DataSection.Wems {
 		desc := wem.Descriptor
+		l := bnk.LoopOf(i)
 		loop := -1
-		if bnk.ObjectSection != nil {
-			cnt, ok := bnk.ObjectSection.LoopOf[desc.WemId]
-			if ok {
-				loop = int(cnt)
-			}
+		if l.Loops {
+			loop = int(l.Value)
 		}
+
 		fmt.Fprintf(b, wemFmt, i+1, desc.Offset, desc.Length, wem.Padding.Size(),
 			loop)
 	}

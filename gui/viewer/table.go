@@ -170,18 +170,12 @@ func (m *WemModel) wemPadding(index int) string {
 
 func (m *WemModel) wemLoops(index int) string {
 	str := "None"
-	if m.bnk.DataSection == nil || m.bnk.ObjectSection == nil {
-		return str
-	}
+	loop := m.bnk.LoopOf(index)
 
-	desc := m.bnk.DataSection.Wems[index].Descriptor
-	loopCount, ok := m.bnk.ObjectSection.LoopOf[desc.WemId]
-	if ok {
-		if loopCount == bnk.InfiniteLoops {
-			str = "Infinity"
-		} else {
-			str = fmt.Sprintf("%d times", loopCount)
-		}
+	if loop.Value == bnk.InfiniteLoops {
+		str = "Infinity"
+	} else {
+		str = fmt.Sprintf("%d times", loop.Value)
 	}
 	return str
 }
