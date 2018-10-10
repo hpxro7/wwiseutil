@@ -233,8 +233,68 @@ func (bnk *File) LoopOf(i int) LoopValue {
 		return value
 	}
 
-	cnt, ok := bnk.ObjectSection.loopOf[desc.WemId]
-	return LoopValue{ok, cnt}
+	lf, ok := bnk.ObjectSection.loopOf[desc.WemId]
+	return LoopValue{ok, lf.value}
+}
+
+// ReplaceLoopOf replaces the loop value of the wem stored in this SoundBank at
+// index i with the new value. This method is idempotent.
+func (bnk *File) ReplaceLoopOf(i int, loop LoopValue) {
+	if bnk.DataSection == nil {
+		return
+	}
+
+	wems := bnk.DataSection.Wems
+	if i < 0 || i >= len(wems) {
+		return
+	}
+
+	desc := bnk.DataSection.Wems[i].Descriptor
+	if bnk.ObjectSection == nil {
+		return
+	}
+
+	old, oldLoops := bnk.ObjectSection.loopOf[desc.WemId]
+	// Return if the loop values aren't changing.
+	if oldLoops == false && loop.Loops == false || ((oldLoops == loop.Loops) &&
+		old.value == loop.Value) {
+		return
+	}
+
+	if loop.Loops == false {
+		// We are removing looping from an audio object that already has a loop.
+		for i, paramType := range old.parent.ParameterTypes {
+			if paramType == parameterLoopType {
+				old.parent.ParameterCount--
+				old.parent.ParameterTypes = append(
+					old.parent.ParameterTypes[:i], old.parent.ParameterTypes[i+1:]...)
+				old.parent.ParameterValues = append(
+					old.parent.ParameterValues[:i], old.parent.ParameterValues[i+1:]...)
+				delete(bnk.ObjectSection.loopOf, desc.WemId)
+				return
+			}
+		}
+	} else {
+		var lbs [4]byte
+		binary.LittleEndian.PutUint32(lbs[:], loop.Value)
+		if oldLoops {
+			// We are modifying the existing loop value of an audio object.
+			for i, paramType := range old.parent.ParameterTypes {
+				if paramType == parameterLoopType {
+					old.parent.ParameterValues[i] = lbs
+					return
+				}
+			}
+		} else { // oldLoops == false
+			// We are adding looping to an audio object that did not loop.
+			old.parent.ParameterCount++
+			old.parent.ParameterTypes = append(
+				old.parent.ParameterTypes, parameterLoopType)
+			old.parent.ParameterValues = append(old.parent.ParameterValues, lbs)
+			bnk.ObjectSection.loopOf[desc.WemId] =
+				loopFacade{loop.Value, old.parent}
+		}
+	}
 }
 
 func (bnk *File) String() string {

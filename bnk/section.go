@@ -100,6 +100,14 @@ type WemDescriptor struct {
 	Length uint32
 }
 
+// A loopFacade is a wrapper over a loop value, with a reference to the
+// parent SoundStructure to be able to edit it.
+type loopFacade struct {
+	// The loop value, where 0 represents infinity.
+	value  uint32
+	parent *SoundStructure
+}
+
 // A ObjectHierarchySection represents the HIRC section of a SoundBank file,
 // which contains all wwise metadata objects defining the behavior and
 // properties of wems.
@@ -108,9 +116,8 @@ type ObjectHierarchySection struct {
 	ObjectCount uint32
 	objects     []Object
 	// A convenience field for accessing the loop parameters of every wem. It maps
-	// the wem id of the loop in question to the loop value, where 0 represents
-	// infinity.
-	loopOf map[uint32]uint32
+	// the wem id of the loop in question to a wrapper over the loop value.
+	loopOf map[uint32]loopFacade
 }
 
 // An UnknownSection represents an unknown section in a SoundBank file.
@@ -314,7 +321,7 @@ func (hdr *SectionHeader) NewObjectHierarchySection(sr *io.SectionReader) (*Obje
 	}
 	sec := new(ObjectHierarchySection)
 	sec.Header = hdr
-	sec.loopOf = make(map[uint32]uint32)
+	sec.loopOf = make(map[uint32]loopFacade)
 
 	var count uint32
 	err := binary.Read(sr, binary.LittleEndian, &count)
@@ -337,7 +344,8 @@ func (hdr *SectionHeader) NewObjectHierarchySection(sr *io.SectionReader) (*Obje
 			}
 
 			if obj.Structure.loops {
-				sec.loopOf[obj.WemDescriptor.WemId] = obj.Structure.loopCount
+				sec.loopOf[obj.WemDescriptor.WemId] =
+					loopFacade{obj.Structure.loopCount, obj.Structure}
 			}
 			sec.objects = append(sec.objects, obj)
 		default:
