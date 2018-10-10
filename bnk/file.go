@@ -222,9 +222,11 @@ func (bnk *File) String() string {
 		desc := wem.Descriptor
 		opt := OptionalWemDescriptor{desc.WemId, desc.Length}
 		loop := -1
-		cnt, ok := bnk.ObjectSection.loopOf[opt]
-		if ok {
-			loop = int(cnt)
+		if bnk.ObjectSection != nil {
+			cnt, ok := bnk.ObjectSection.LoopOf[opt]
+			if ok {
+				loop = int(cnt)
+			}
 		}
 		fmt.Fprintf(b, wemFmt, i+1, desc.Offset, desc.Length, wem.Padding.Size(),
 			loop)

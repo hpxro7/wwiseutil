@@ -27,6 +27,8 @@ const soundObjectId = 0x02
 // The wem is embedded in this sound file.
 const streamSettingEmbedded = 0x00
 
+const InfiniteLoops = 0
+
 // Object represents a single object within the HIRC section.
 type Object interface {
 	io.WriterTo

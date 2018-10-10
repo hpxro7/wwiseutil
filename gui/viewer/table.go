@@ -60,6 +60,7 @@ func (t *WemTable) UpdateWems(file *bnk.File) {
 		{"Size", m.defaultOr(m.wemSize)},
 		{"File offset", m.defaultOr(m.wemOffset)},
 		{"Padding", m.defaultOr(m.wemPadding)},
+		{"Loops", m.defaultOr(m.wemLoops)},
 	}
 
 	t.model = m
@@ -165,6 +166,25 @@ func (m *WemModel) wemOffset(index int) string {
 func (m *WemModel) wemPadding(index int) string {
 	paddingSize := m.bnk.DataSection.Wems[index].Padding.Size()
 	return fmt.Sprintf("%d bytes", paddingSize)
+}
+
+func (m *WemModel) wemLoops(index int) string {
+	str := "None"
+	if m.bnk.DataSection == nil || m.bnk.ObjectSection == nil {
+		return str
+	}
+
+	desc := m.bnk.DataSection.Wems[index].Descriptor
+	opt := bnk.OptionalWemDescriptor{WemId: desc.WemId, WemLength: desc.Length}
+	loopCount, ok := m.bnk.ObjectSection.LoopOf[opt]
+	if ok {
+		if loopCount == bnk.InfiniteLoops {
+			str = "Infinity"
+		} else {
+			str = fmt.Sprintf("%d times", loopCount)
+		}
+	}
+	return str
 }
 
 func (m *WemModel) rowCount(parent *core.QModelIndex) int {
