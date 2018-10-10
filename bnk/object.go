@@ -19,6 +19,8 @@ const EFFECT_BYTES = 7
 const PARAMETER_VALUE_BYTES = 4
 const STRUCTURE_UNKNOWN_BYTES = 10
 
+const parameterLoopType = 0x3A
+
 // The identifier for SFX or Voice sound objects.
 const soundObjectId = 0x02
 
@@ -78,6 +80,11 @@ type SoundStructure struct {
 	ParameterCount        byte
 	ParameterTypes        []byte
 	ParameterValues       [][4]byte
+	// A convinience field to determine if this sound loops.
+	loops bool
+	// A convinience field to determine the number of times this sound loops, wher
+	// 0 means the sound will loop infinite times.
+	loopCount uint32
 	// A reader to read the remaining data of this structure.
 	RemainingReader io.Reader
 }
@@ -231,6 +238,7 @@ func NewSoundStructure(sr *io.SectionReader, length int64) (*SoundStructure, err
 
 	var types []byte
 	var values [][4]byte
+	loops, loopCount := false, uint32(0)
 
 	// Read in parameter types.
 	for i := byte(0); i < count; i++ {
@@ -249,6 +257,11 @@ func NewSoundStructure(sr *io.SectionReader, length int64) (*SoundStructure, err
 		if err != nil {
 			return nil, err
 		}
+
+		// Save loop information for convinience if this sound object loops.
+		if types[i] == parameterLoopType {
+			loops, loopCount = true, binary.LittleEndian.Uint32(v[:])
+		}
 		values = append(values, v)
 	}
 
@@ -258,7 +271,8 @@ func NewSoundStructure(sr *io.SectionReader, length int64) (*SoundStructure, err
 	remaining := length - (currOffset - startOffset)
 	r := io.NewSectionReader(sr, currOffset, remaining)
 	sr.Seek(remaining, io.SeekCurrent)
-	return &SoundStructure{override, ctr, unknown, count, types, values, r}, nil
+	return &SoundStructure{override, ctr, unknown, count, types, values,
+		loops, loopCount, r}, nil
 }
 
 func (ss *SoundStructure) WriteTo(w io.Writer) (written int64, err error) {
