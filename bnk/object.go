@@ -16,6 +16,8 @@ const OVERRIDE_EFFECTS_BYTES = 1
 const SFX_UNKNOWN_BYTES = 5
 const OPTIONAL_WEM_DESCRIPTOR_BYTES = 8
 const EFFECT_BYTES = 7
+const PARAMETER_VALUE_BYTES = 4
+const STRUCTURE_UNKNOWN_BYTES = 10
 
 // The identifier for SFX or Voice sound objects.
 const soundObjectId = 0x02
@@ -72,6 +74,10 @@ type UnknownObject struct {
 type SoundStructure struct {
 	OverrideParentEffects byte
 	EffectContainer       *EffectContainer
+	Unknown               *[10]byte
+	ParameterCount        byte
+	ParameterTypes        []byte
+	ParameterValues       [][4]byte
 	// A reader to read the remaining data of this structure.
 	RemainingReader io.Reader
 }
@@ -206,9 +212,44 @@ func NewSoundStructure(sr *io.SectionReader, length int64) (*SoundStructure, err
 		return nil, err
 	}
 
-	container, err := NewEffectContainer(sr)
+	ctr, err := NewEffectContainer(sr)
 	if err != nil {
 		return nil, err
+	}
+
+	unknown := new([10]byte)
+	err = binary.Read(sr, binary.LittleEndian, unknown)
+	if err != nil {
+		return nil, err
+	}
+
+	var count byte
+	err = binary.Read(sr, binary.LittleEndian, &count)
+	if err != nil {
+		return nil, err
+	}
+
+	var types []byte
+	var values [][4]byte
+
+	// Read in parameter types.
+	for i := byte(0); i < count; i++ {
+		var t byte
+		err = binary.Read(sr, binary.LittleEndian, &t)
+		if err != nil {
+			return nil, err
+		}
+		types = append(types, t)
+	}
+
+	// Read in parameter values.
+	for i := byte(0); i < count; i++ {
+		var v [4]byte
+		err = binary.Read(sr, binary.LittleEndian, &v)
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, v)
 	}
 
 	// Create a reader over the remaining elements in this object, then seek past
@@ -217,7 +258,7 @@ func NewSoundStructure(sr *io.SectionReader, length int64) (*SoundStructure, err
 	remaining := length - (currOffset - startOffset)
 	r := io.NewSectionReader(sr, currOffset, remaining)
 	sr.Seek(remaining, io.SeekCurrent)
-	return &SoundStructure{override, container, r}, nil
+	return &SoundStructure{override, ctr, unknown, count, types, values, r}, nil
 }
 
 func (ss *SoundStructure) WriteTo(w io.Writer) (written int64, err error) {
@@ -232,6 +273,30 @@ func (ss *SoundStructure) WriteTo(w io.Writer) (written int64, err error) {
 		return
 	}
 	written += n
+
+	err = binary.Write(w, binary.LittleEndian, ss.Unknown)
+	if err != nil {
+		return
+	}
+	written += STRUCTURE_UNKNOWN_BYTES
+
+	err = binary.Write(w, binary.LittleEndian, ss.ParameterCount)
+	if err != nil {
+		return
+	}
+	written += 1
+
+	err = binary.Write(w, binary.LittleEndian, ss.ParameterTypes)
+	if err != nil {
+		return
+	}
+	written += int64(ss.ParameterCount)
+
+	err = binary.Write(w, binary.LittleEndian, ss.ParameterValues)
+	if err != nil {
+		return
+	}
+	written += int64(ss.ParameterCount) * PARAMETER_VALUE_BYTES
 
 	n, err = io.Copy(w, ss.RemainingReader)
 	if err != nil {
