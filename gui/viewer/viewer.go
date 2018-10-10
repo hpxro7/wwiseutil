@@ -44,6 +44,11 @@ type WwiseViewerWindow struct {
 	actionReplace *widgets.QAction
 	actionExport  *widgets.QAction
 
+	loopToolBar      *widgets.QToolBar
+	checkboxLoop     *widgets.QCheckBox
+	checkboxInfinity *widgets.QCheckBox
+	lineEditLoop     *widgets.QLineEdit
+
 	table          *WemTable
 	selectionIndex int
 }
@@ -64,8 +69,8 @@ func New() *WwiseViewerWindow {
 	tb.AddSeparator()
 	wv.AddToolBarBreak(core.Qt__TopToolBarArea)
 
-	ltb := wv.setupLoopOptionsToolbar()
-	wv.AddToolBar2(ltb)
+	wv.setupLoopOptionsToolbar()
+	wv.AddToolBar2(wv.loopToolBar)
 
 	wv.table = NewTable()
 	wv.selectionIndex = -1
@@ -85,6 +90,7 @@ func (wv *WwiseViewerWindow) setupOpen(toolbar *widgets.QToolBar) {
 			wv, "Open file", home, supportedFileFilters, "", 0)
 		if path != "" {
 			wv.openBnk(path)
+			wv.clearLoopValues()
 		}
 	})
 	toolbar.QWidget.AddAction(wv.actionOpen)
@@ -187,30 +193,77 @@ func (wv *WwiseViewerWindow) setupExport(toolbar *widgets.QToolBar) {
 	toolbar.QWidget.AddAction(wv.actionExport)
 }
 
-func (wv *WwiseViewerWindow) setupLoopOptionsToolbar() *widgets.QToolBar {
+func (wv *WwiseViewerWindow) setupLoopOptionsToolbar() {
 	ltb := widgets.NewQToolBar("Loop Toolbar", nil)
 	ltb.SetToolButtonStyle(core.Qt__ToolButtonTextOnly)
 
-	checkboxLoop := widgets.NewQCheckBox2("&Loop", wv)
-	checkboxInfinity := widgets.NewQCheckBox2("&Infinity", wv)
-	lineEditValue := widgets.NewQLineEdit(wv)
-	lineEditValue.SetPlaceholderText("Times to loop")
-	lineEditValue.SetMaximumWidth(90)
-	lineEditValue.SetMaxLength(10)
+	wv.checkboxLoop = widgets.NewQCheckBox2("&Loop", wv)
+	wv.checkboxLoop.ConnectStateChanged(func(state int) {
+		if state == int(core.Qt__Checked) {
+			wv.checkboxInfinity.SetEnabled(true)
+			if wv.checkboxInfinity.CheckState() == core.Qt__Checked {
+				wv.lineEditLoop.SetEnabled(false)
+			} else {
+				wv.lineEditLoop.SetEnabled(true)
+			}
+		} else {
+			wv.checkboxInfinity.SetEnabled(false)
+			wv.lineEditLoop.SetEnabled(false)
+		}
+	})
+	wv.checkboxInfinity = widgets.NewQCheckBox2("&Infinity", wv)
+	wv.checkboxInfinity.ConnectStateChanged(func(state int) {
+		if state == int(core.Qt__Checked) {
+			wv.lineEditLoop.SetEnabled(false)
+		} else {
+			wv.lineEditLoop.SetEnabled(true)
+		}
+	})
+	wv.lineEditLoop = widgets.NewQLineEdit(wv)
+	wv.lineEditLoop.SetPlaceholderText("Times to loop")
+	wv.lineEditLoop.SetMaximumWidth(90)
+	wv.lineEditLoop.SetMaxLength(10)
 
-	actionSetLoop := widgets.NewQAction2("Set &Loop", wv)
+	actionSetLoop := widgets.NewQAction2("&Update Loop", wv)
 	actionSetLoop.ConnectTriggered(func(checked bool) {
-
 	})
 
-	ltb.AddWidget(checkboxLoop)
-	ltb.AddWidget(checkboxInfinity)
-	ltb.AddWidget(lineEditValue)
+	ltb.AddWidget(wv.checkboxLoop)
+	ltb.AddWidget(wv.checkboxInfinity)
+	ltb.AddWidget(wv.lineEditLoop)
 	ltb.QWidget.AddAction(actionSetLoop)
 	ltb.AddSeparator()
 	ltb.SetEnabled(false)
 
-	return ltb
+	wv.loopToolBar = ltb
+}
+
+func (wv *WwiseViewerWindow) clearLoopValues() {
+	wv.lineEditLoop.Clear()
+	wv.checkboxInfinity.SetCheckState(core.Qt__Unchecked)
+	wv.checkboxLoop.SetCheckState(core.Qt__Unchecked)
+	wv.loopToolBar.SetEnabled(false)
+}
+
+func (wv *WwiseViewerWindow) setLoopValues(wemIndex int) {
+	b := wv.table.GetSoundBank()
+	loop := b.LoopOf(wemIndex)
+	if loop.Loops {
+		if loop.Value == bnk.InfiniteLoops {
+			wv.lineEditLoop.Clear()
+			wv.checkboxInfinity.SetCheckState(core.Qt__Checked)
+		} else {
+			wv.lineEditLoop.SetText(fmt.Sprintf("%d", loop.Value))
+			wv.checkboxInfinity.SetCheckState(core.Qt__Unchecked)
+		}
+		wv.checkboxLoop.SetCheckState(core.Qt__Checked)
+	} else {
+		wv.lineEditLoop.Clear()
+		wv.lineEditLoop.SetEnabled(false)
+		wv.checkboxInfinity.SetCheckState(core.Qt__Unchecked)
+		wv.checkboxInfinity.SetEnabled(false)
+		wv.checkboxLoop.SetCheckState(core.Qt__Unchecked)
+	}
 }
 
 func (wv *WwiseViewerWindow) exportBnk(dir string) {
@@ -253,7 +306,12 @@ func (wv *WwiseViewerWindow) onWemSelected(selected *core.QItemSelection,
 		wv.actionReplace.SetEnabled(false)
 		return
 	}
+
+	wemIndex := selected.Indexes()[0].Row()
+
 	wv.actionReplace.SetEnabled(true)
+	wv.loopToolBar.SetEnabled(true)
+	wv.setLoopValues(wemIndex)
 }
 
 func (wv *WwiseViewerWindow) showExportError(filename string, path string,

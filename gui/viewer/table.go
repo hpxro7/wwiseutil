@@ -172,10 +172,12 @@ func (m *WemModel) wemLoops(index int) string {
 	str := "None"
 	loop := m.bnk.LoopOf(index)
 
-	if loop.Value == bnk.InfiniteLoops {
-		str = "Infinity"
-	} else {
-		str = fmt.Sprintf("%d times", loop.Value)
+	if loop.Loops {
+		if loop.Value == bnk.InfiniteLoops {
+			str = "Infinity"
+		} else {
+			str = fmt.Sprintf("%d times", loop.Value)
+		}
 	}
 	return str
 }
