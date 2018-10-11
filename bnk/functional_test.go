@@ -36,6 +36,25 @@ func TestComplexUnchangedFileIsEqual(t *testing.T) {
 	unchangedFileIsEqual(complexSoundBank, t)
 }
 
+func TestUnchangedWriteFileTwiceIsEqual(t *testing.T) {
+	skipIfShort(t)
+
+	f, err := os.Open(filepath.Join(testDir, complexSoundBank))
+	if err != nil {
+		t.Error(err)
+	}
+	bnk, err := NewFile(f)
+	if err != nil {
+		t.Error(err)
+	}
+	AssertSoundBankEqualToFile(t, f, bnk)
+	f, err = os.Open(filepath.Join(testDir, complexSoundBank))
+	if err != nil {
+		t.Error(err)
+	}
+	AssertSoundBankEqualToFile(t, f, bnk)
+}
+
 func unchangedFileIsEqual(name string, t *testing.T) {
 	skipIfShort(t)
 
@@ -69,6 +88,33 @@ func TestReplaceFirstWemWithSmaller(t *testing.T) {
 		t.Error(err)
 	}
 
+	AssertSoundBankEqualToFile(t, expect, bnk)
+}
+
+func TestReplaceFirstWemWithLargerTwice(t *testing.T) {
+	skipIfShort(t)
+
+	bnk, err := Open(filepath.Join(testDir, complexSoundBank))
+	if err != nil {
+		t.Error(err)
+	}
+	wem, err := os.Open(filepath.Join(testDir, largerWem))
+	if err != nil {
+		t.Error(err)
+	}
+	stat, _ := wem.Stat()
+	bnk.ReplaceWems(&ReplacementWem{wem, 0, stat.Size()})
+
+	expect, err := os.Open(filepath.Join(testDir, "0_replaced_with_larger.bnk"))
+	if err != nil {
+		t.Error(err)
+	}
+	AssertSoundBankEqualToFile(t, expect, bnk)
+
+	expect, err = os.Open(filepath.Join(testDir, "0_replaced_with_larger.bnk"))
+	if err != nil {
+		t.Error(err)
+	}
 	AssertSoundBankEqualToFile(t, expect, bnk)
 }
 

@@ -6,6 +6,10 @@ import (
 	"io"
 )
 
+import (
+	"github.com/hpxro7/bnkutil/util"
+)
+
 // The number of bytes used to describe the a HIRC object.
 const OBJECT_DESCRIPTOR_BYTES = 9
 
@@ -107,7 +111,7 @@ type Effect struct {
 
 // NewSfxVoiceSoundObject creates a new SfxVoiceSoundObject, reading from sr,
 // which must be seeked to the start of the object's data.
-func (desc *ObjectDescriptor) NewSfxVoiceSoundObject(sr *io.SectionReader) (*SfxVoiceSoundObject, error) {
+func (desc *ObjectDescriptor) NewSfxVoiceSoundObject(sr util.ReadSeekerAt) (*SfxVoiceSoundObject, error) {
 	// Get the offset into the file where the data portion of this object begins.
 	startOffset, _ := sr.Seek(0, io.SeekCurrent)
 	// The descriptor length includes the Object ID, which has already been
@@ -180,13 +184,13 @@ func (sound *SfxVoiceSoundObject) WriteTo(w io.Writer) (written int64, err error
 
 // NewUnknownObject creates a new UnknownObject, reading from sr, which must
 // be seeked to the start of the unknown object's data.
-func (desc *ObjectDescriptor) NewUnknownObject(sr *io.SectionReader) (*UnknownObject, error) {
+func (desc *ObjectDescriptor) NewUnknownObject(sr util.ReadSeekerAt) (*UnknownObject, error) {
 	// Get the offset into the file where the data portion of this object begins.
 	dataOffset, _ := sr.Seek(0, io.SeekCurrent)
 	// The descriptor length includes the Object ID, which has already been
 	// written. Remove this from the remaining length
 	dataLength := int64(desc.Length) - OBJECT_DESCRIPTOR_ID_BYTES
-	r := io.NewSectionReader(sr, dataOffset, dataLength)
+	r := util.NewResettingReader(sr, dataOffset, dataLength)
 	sr.Seek(dataLength, io.SeekCurrent)
 	return &UnknownObject{desc, r}, nil
 }
@@ -211,7 +215,7 @@ func (unknown *UnknownObject) WriteTo(w io.Writer) (written int64, err error) {
 
 // NewSoundStructure creates a new SoundStructure, reading from sr, which must be
 // seeked to the start of the structure's data.
-func NewSoundStructure(sr *io.SectionReader, length int64) (*SoundStructure, error) {
+func NewSoundStructure(sr util.ReadSeekerAt, length int64) (*SoundStructure, error) {
 	// Get the offset into the file where the structure begins.
 	startOffset, _ := sr.Seek(0, io.SeekCurrent)
 	var override byte
@@ -270,7 +274,7 @@ func NewSoundStructure(sr *io.SectionReader, length int64) (*SoundStructure, err
 	// it.
 	currOffset, _ := sr.Seek(0, io.SeekCurrent)
 	remaining := length - (currOffset - startOffset)
-	r := io.NewSectionReader(sr, currOffset, remaining)
+	r := util.NewResettingReader(sr, currOffset, remaining)
 	sr.Seek(remaining, io.SeekCurrent)
 	return &SoundStructure{override, ctr, unknown, count, types, values,
 		loops, loopCount, r}, nil
@@ -324,7 +328,7 @@ func (ss *SoundStructure) WriteTo(w io.Writer) (written int64, err error) {
 
 // NewEffectContainer creates a new EffectContainer, reading from sr, which must
 // be seeked to the start of the container.
-func NewEffectContainer(sr *io.SectionReader) (*EffectContainer, error) {
+func NewEffectContainer(sr util.ReadSeekerAt) (*EffectContainer, error) {
 	var count byte
 	err := binary.Read(sr, binary.LittleEndian, &count)
 	if err != nil {

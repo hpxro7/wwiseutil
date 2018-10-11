@@ -8,6 +8,10 @@ import (
 	"strings"
 )
 
+import (
+	"github.com/hpxro7/bnkutil/util"
+)
+
 // The number of bytes used to describe the header of a section.
 const SECTION_HEADER_BYTES = 8
 
@@ -86,7 +90,7 @@ type Wem struct {
 	// A reader over the bytes that remain until the next wem if there is one, or
 	// the end of the data section. These bytes are NUL(0x00) padding up until the
 	// next 16-aligned byte (i.e. nextWem.Offset % 16 = 0).
-	Padding *io.SectionReader
+	Padding util.ReadSeekerAt
 }
 
 // A WemDescriptor represents the location of a single wem entity within the
@@ -130,7 +134,7 @@ type UnknownSection struct {
 // NewBankHeaderSection creates a new BankHeaderSection, reading from sr, which
 // must be seeked to the start of the BKHD section data.
 // It is an error to call this method on a non-BKHD header.
-func (hdr *SectionHeader) NewBankHeaderSection(sr *io.SectionReader) (*BankHeaderSection, error) {
+func (hdr *SectionHeader) NewBankHeaderSection(sr util.ReadSeekerAt) (*BankHeaderSection, error) {
 	if hdr.Identifier != bkhdHeaderId {
 		panic(fmt.Sprintf("Expected BKHD header but got: %s", hdr.Identifier))
 	}
@@ -145,7 +149,7 @@ func (hdr *SectionHeader) NewBankHeaderSection(sr *io.SectionReader) (*BankHeade
 	// Get the offset into the file where the known portion of the BKHD ends.
 	knownOffset, _ := sr.Seek(0, io.SeekCurrent)
 	remaining := int64(hdr.Length - BKHD_SECTION_BYTES)
-	sec.RemainingReader = io.NewSectionReader(sr, knownOffset, remaining)
+	sec.RemainingReader = util.NewResettingReader(sr, knownOffset, remaining)
 	sr.Seek(remaining, io.SeekCurrent)
 
 	return sec, nil
@@ -242,7 +246,7 @@ func (idx *DataIndexSection) String() string {
 // seeked to the start of the DATA section data. idx specifies how each wem
 // should be indexed from, given the current sr offset.
 // It is an error to call this method on a non-DATA header.
-func (hdr *SectionHeader) NewDataSection(sr *io.SectionReader,
+func (hdr *SectionHeader) NewDataSection(sr util.ReadSeekerAt,
 	idx *DataIndexSection) (*DataSection, error) {
 	if hdr.Identifier != dataHeaderId {
 		panic(fmt.Sprintf("Expected DATA header but got: %s", hdr.Identifier))
@@ -253,9 +257,9 @@ func (hdr *SectionHeader) NewDataSection(sr *io.SectionReader,
 	for i, id := range idx.WemIds {
 		desc := idx.DescriptorMap[id]
 		wemStartOffset := dataOffset + int64(desc.Offset)
-		wemReader := io.NewSectionReader(sr, wemStartOffset, int64(desc.Length))
+		wemReader := util.NewResettingReader(sr, wemStartOffset, int64(desc.Length))
 
-		var padding *io.SectionReader
+		var padding util.ReadSeekerAt
 
 		if i <= len(idx.WemIds)-1 {
 			wemEndOffset := wemStartOffset + int64(desc.Length)
@@ -273,7 +277,7 @@ func (hdr *SectionHeader) NewDataSection(sr *io.SectionReader,
 			remaining := nextOffset - wemEndOffset
 			// Pass a Reader over the remaining section if we have remaining bytes to
 			// read, or an empty Reader if remaining is 0 (no bytes will be read).
-			padding = io.NewSectionReader(sr, wemEndOffset, remaining)
+			padding = util.NewResettingReader(sr, wemEndOffset, remaining)
 		}
 
 		wem := Wem{wemReader, desc, padding}
@@ -315,7 +319,7 @@ func (data *DataSection) String() string {
 // NewObjectHierarchySection creates a new ObjectHierarchySection, reading from
 // sr, which must be seeked to the start of the HIRC section data.
 // It is an error to call this method on a non-HIRC header.
-func (hdr *SectionHeader) NewObjectHierarchySection(sr *io.SectionReader) (*ObjectHierarchySection, error) {
+func (hdr *SectionHeader) NewObjectHierarchySection(sr util.ReadSeekerAt) (*ObjectHierarchySection, error) {
 	if hdr.Identifier != hircHeaderId {
 		panic(fmt.Sprintf("Expected HIRC header but got: %s", hdr.Identifier))
 	}
@@ -396,10 +400,10 @@ func (hrc *ObjectHierarchySection) String() string {
 
 // NewUnknownSection creates a new UnknownSection, reading from sr, which
 // must be seeked to the start of the unknown section data.
-func (hdr *SectionHeader) NewUnknownSection(sr *io.SectionReader) (*UnknownSection, error) {
+func (hdr *SectionHeader) NewUnknownSection(sr util.ReadSeekerAt) (*UnknownSection, error) {
 	// Get the offset into the file where the data portion of this section begins.
 	dataOffset, _ := sr.Seek(0, io.SeekCurrent)
-	r := io.NewSectionReader(sr, dataOffset, int64(hdr.Length))
+	r := util.NewResettingReader(sr, dataOffset, int64(hdr.Length))
 	sr.Seek(int64(hdr.Length), io.SeekCurrent)
 	return &UnknownSection{hdr, r}, nil
 }

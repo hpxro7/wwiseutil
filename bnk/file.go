@@ -12,6 +12,10 @@ import (
 	"strings"
 )
 
+import (
+	"github.com/hpxro7/bnkutil/util"
+)
+
 // A LoopValue identifier for looping infinite times.
 const InfiniteLoops = 0
 
@@ -60,7 +64,7 @@ type LoopValue struct {
 func NewFile(r io.ReaderAt) (*File, error) {
 	bnk := new(File)
 
-	sr := io.NewSectionReader(r, 0, math.MaxInt64)
+	sr := util.NewResettingReader(r, 0, math.MaxInt64)
 	for {
 		hdr := new(SectionHeader)
 		err := binary.Read(sr, binary.LittleEndian, hdr)
@@ -169,7 +173,7 @@ func (bnk *File) ReplaceWems(rs ...*ReplacementWem) {
 	for i, r := range rs {
 		wem := bnk.DataSection.Wems[r.WemIndex]
 		newLength, oldLength := r.Length, int64(wem.Descriptor.Length)
-		wem.Reader = io.NewSectionReader(r.Wem, 0, newLength)
+		wem.Reader = util.NewResettingReader(r.Wem, 0, newLength)
 
 		padding := wem.Padding.Size()
 		if newLength > oldLength {
@@ -190,7 +194,7 @@ func (bnk *File) ReplaceWems(rs ...*ReplacementWem) {
 		// updates the descriptor stored in the IndexSection's DescriptorMap, as
 		// well.
 		wem.Descriptor.Length = uint32(newLength)
-		wem.Padding = io.NewSectionReader(&InfiniteReaderAt{0}, 0, padding)
+		wem.Padding = util.NewResettingReader(&InfiniteReaderAt{0}, 0, padding)
 
 		if surplus > 0 {
 			// Shift the offsets for the next wems, since the current wem is going to

@@ -3,11 +3,34 @@ package util
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"runtime"
 	"strconv"
 	"strings"
 )
+
+type ReadSeekerAt interface {
+	io.ReadSeeker
+	io.ReaderAt
+	Size() int64
+}
+
+type ResettingReader struct {
+	*io.SectionReader
+}
+
+func NewResettingReader(r io.ReaderAt, off int64, n int64) ReadSeekerAt {
+	return &ResettingReader{io.NewSectionReader(r, off, n)}
+}
+
+func (r *ResettingReader) Read(p []byte) (n int, err error) {
+	n, err = r.SectionReader.Read(p)
+	if err == io.EOF {
+		r.SectionReader.Seek(0, io.SeekStart)
+	}
+	return
+}
 
 // UserHome returns the platform-specific path to the user's home directory.
 func UserHome() string {
