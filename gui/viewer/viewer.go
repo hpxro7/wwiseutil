@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -147,16 +148,15 @@ func (wv *WwiseViewerWindow) setupReplace(toolbar *widgets.QToolBar) {
 	wv.actionReplace = widgets.NewQAction3(icon, "&Replace", wv)
 	wv.actionReplace.SetEnabled(false)
 	wv.actionReplace.ConnectTriggered(func(checked bool) {
-		selection := wv.table.SelectionModel()
-		indexes := selection.SelectedRows(0)
-		if len(indexes) == 0 {
+		row := wv.getSelectedRow()
+		if row < 0 {
 			return
 		}
 		home := util.UserHome()
 		path := widgets.QFileDialog_GetOpenFileName(
 			wv, "Open file", home, wemFileFilters, "", 0)
 		if path != "" {
-			wv.addReplacement(indexes[0].Row(), path)
+			wv.addReplacement(row, path)
 		}
 	})
 	toolbar.QWidget.AddAction(wv.actionReplace)
@@ -226,6 +226,23 @@ func (wv *WwiseViewerWindow) setupLoopOptionsToolbar() {
 
 	actionSetLoop := widgets.NewQAction2("&Update Loop", wv)
 	actionSetLoop.ConnectTriggered(func(checked bool) {
+		wemIndex := wv.getSelectedRow()
+		loops := wv.checkboxLoop.CheckState() == core.Qt__Checked
+		infinity := false
+		value, err := 0, error(nil)
+
+		if loops {
+			infinity = wv.checkboxInfinity.CheckState() == core.Qt__Checked
+			lineEditText := wv.lineEditLoop.DisplayText()
+			if !infinity {
+				value, err = strconv.Atoi(lineEditText)
+				if err != nil || value < 2 {
+					wv.showLoopUpdateError(lineEditText)
+					return
+				}
+			}
+		}
+		wv.table.UpdateLoop(wemIndex, &loopWrapper{loops, infinity, uint32(value)})
 	})
 
 	ltb.AddWidget(wv.checkboxLoop)
@@ -307,7 +324,7 @@ func (wv *WwiseViewerWindow) onWemSelected(selected *core.QItemSelection,
 		return
 	}
 
-	wemIndex := selected.Indexes()[0].Row()
+	wemIndex := wv.getSelectedRow()
 
 	wv.actionReplace.SetEnabled(true)
 	wv.loopToolBar.SetEnabled(true)
@@ -329,4 +346,20 @@ func (wv *WwiseViewerWindow) showSaveError(path string, err error) {
 func (wv *WwiseViewerWindow) showOpenError(path string, err error) {
 	msg := fmt.Sprintf("Could not open %s:\n%s", path, err)
 	widgets.QMessageBox_Critical4(wv, errorTitle, msg, 0, 0)
+}
+
+func (wv *WwiseViewerWindow) showLoopUpdateError(value string) {
+	msg := fmt.Sprintf("\"%s\" is not a valid looping value.\n "+
+		"The loop value must be an integer >= 2.", value)
+	widgets.QMessageBox_Critical4(wv, errorTitle, msg, 0, 0)
+}
+
+// Returns the index of the selected row, or -1 if a row isn't selected.
+func (wv *WwiseViewerWindow) getSelectedRow() int {
+	selection := wv.table.SelectionModel()
+	indexes := selection.SelectedRows(0)
+	if len(indexes) == 0 {
+		return -1
+	}
+	return indexes[0].Row()
 }

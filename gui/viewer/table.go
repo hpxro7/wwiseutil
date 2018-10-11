@@ -18,9 +18,15 @@ type columnBinding struct {
 	accessor wemAccessor
 }
 
-type replacementWrapper struct {
+type replacementWemWrapper struct {
 	name        string
 	replacement *bnk.ReplacementWem
+}
+
+type loopWrapper struct {
+	loops    bool
+	infinity bool
+	value    uint32
 }
 
 type WemTable struct {
@@ -34,7 +40,7 @@ type WemModel struct {
 
 	bnk *bnk.File
 	// A mapping from wem index to the replacement wem.
-	replacements map[int]*replacementWrapper
+	replacements map[int]*replacementWemWrapper
 }
 
 func NewTable() *WemTable {
@@ -68,18 +74,22 @@ func (t *WemTable) UpdateWems(file *bnk.File) {
 }
 
 func (t *WemTable) AddWemReplacement(name string, r *bnk.ReplacementWem) {
-	t.model.replacements[r.WemIndex] = &replacementWrapper{name, r}
+	t.model.replacements[r.WemIndex] = &replacementWemWrapper{name, r}
 	// Modify the entire row for that wem.
-	count := t.model.columnCount(nil)
-	start := t.IndexAt(core.NewQPoint2(r.WemIndex, 0))
-	end := t.IndexAt(core.NewQPoint2(r.WemIndex, count-1))
+	t.refreshRow(r.WemIndex)
+}
 
-	var roles []int
-	for i := 0; i < count; i++ {
-		roles = append(roles, int(core.Qt__DisplayRole))
+func (t *WemTable) UpdateLoop(wemIndex int, r *loopWrapper) {
+	loop := bnk.LoopValue{}
+	if r.loops {
+		if r.infinity {
+			loop.Loops, loop.Value = true, 0
+		} else {
+			loop.Loops, loop.Value = true, r.value
+		}
 	}
-
-	t.DataChanged(start, end, roles)
+	t.model.bnk.ReplaceLoopOf(wemIndex, loop)
+	t.refreshRow(wemIndex)
 }
 
 // CommitReplacements commits all changes to the current in-memory audio file.
@@ -94,7 +104,7 @@ func (t *WemTable) CommitReplacements() int {
 	t.model.bnk.ReplaceWems(rs...)
 
 	// Clear all current replacements after committing them.
-	t.model.replacements = make(map[int]*replacementWrapper)
+	t.model.replacements = make(map[int]*replacementWemWrapper)
 
 	// Update the viewmodel with new wem information.
 	rows := t.model.rowCount(nil)
@@ -118,9 +128,25 @@ func (t *WemTable) GetSoundBank() *bnk.File {
 	return t.model.bnk
 }
 
+func (t *WemTable) refreshRow(row int) {
+	count := t.model.columnCount(nil)
+	start := t.IndexAt(core.NewQPoint2(row, 0))
+	end := t.IndexAt(core.NewQPoint2(row, count-1))
+
+	var roles []int
+	for i := 0; i < count; i++ {
+		roles = append(roles, int(core.Qt__DisplayRole))
+	}
+
+	t.model.DataChanged(start, end, roles)
+	// We have to repaint the table after changing the data, or the table doesn't
+	// refresh properly until we refocus on it.
+	t.Viewport().Repaint()
+}
+
 func newModel() *WemModel {
 	model := NewWemModel(nil)
-	model.replacements = make(map[int]*replacementWrapper)
+	model.replacements = make(map[int]*replacementWemWrapper)
 
 	model.ConnectRowCount(model.rowCount)
 	model.ConnectColumnCount(model.columnCount)
