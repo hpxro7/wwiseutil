@@ -15,6 +15,7 @@ import (
 import (
 	"github.com/hpxro7/bnkutil/bnk"
 	"github.com/hpxro7/bnkutil/util"
+	"github.com/hpxro7/bnkutil/wwise"
 )
 
 const shorthandSuffix = " (shorthand)"
@@ -193,8 +194,8 @@ func replace() {
 	fmt.Printf("Wrote %d bytes in total\n", total)
 }
 
-func processTargetFiles(b *bnk.File, fis []os.FileInfo) []*bnk.ReplacementWem {
-	var targets []*bnk.ReplacementWem
+func processTargetFiles(b *bnk.File, fis []os.FileInfo) []*wwise.ReplacementWem {
+	var targets []*wwise.ReplacementWem
 	var names []string
 	for _, fi := range fis {
 		name := fi.Name()
@@ -225,7 +226,7 @@ func processTargetFiles(b *bnk.File, fis []os.FileInfo) []*bnk.ReplacementWem {
 		}
 
 		names = append(names, fi.Name())
-		targets = append(targets, &bnk.ReplacementWem{f, wemIndex, fi.Size()})
+		targets = append(targets, &wwise.ReplacementWem{f, wemIndex, fi.Size()})
 	}
 	if len(targets) == 0 {
 		log.Fatal("There are no replacement wems")
