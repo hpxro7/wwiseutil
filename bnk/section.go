@@ -103,8 +103,6 @@ type WemDescriptor struct {
 // A loopFacade is a wrapper over a loop value, with a reference to the
 // parent SoundStructure to be able to edit it.
 type loopFacade struct {
-	// The loop value, where 0 represents infinity.
-	value  uint32
 	parent *SoundStructure
 }
 
@@ -116,8 +114,9 @@ type ObjectHierarchySection struct {
 	ObjectCount uint32
 	objects     []Object
 	// A convenience field for accessing the loop parameters of every wem. It maps
-	// the wem id of the loop in question to a wrapper over the loop value.
-	loopOf      map[uint32]loopFacade
+	// the wem id of the loop in question to the loop value, where 0 represents
+	// infinity.
+	loopOf      map[uint32]uint32
 	wemToObject map[uint32]*SfxVoiceSoundObject
 }
 
@@ -322,7 +321,7 @@ func (hdr *SectionHeader) NewObjectHierarchySection(sr *io.SectionReader) (*Obje
 	}
 	sec := new(ObjectHierarchySection)
 	sec.Header = hdr
-	sec.loopOf = make(map[uint32]loopFacade)
+	sec.loopOf = make(map[uint32]uint32)
 	sec.wemToObject = make(map[uint32]*SfxVoiceSoundObject)
 
 	var count uint32
@@ -347,8 +346,7 @@ func (hdr *SectionHeader) NewObjectHierarchySection(sr *io.SectionReader) (*Obje
 
 			sec.wemToObject[obj.WemDescriptor.WemId] = obj
 			if obj.Structure.loops {
-				sec.loopOf[obj.WemDescriptor.WemId] =
-					loopFacade{obj.Structure.loopCount, obj.Structure}
+				sec.loopOf[obj.WemDescriptor.WemId] = obj.Structure.loopCount
 			}
 			sec.objects = append(sec.objects, obj)
 		default:

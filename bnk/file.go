@@ -233,8 +233,8 @@ func (bnk *File) LoopOf(i int) LoopValue {
 		return value
 	}
 
-	lf, ok := bnk.ObjectSection.loopOf[desc.WemId]
-	return LoopValue{ok, lf.value}
+	times, ok := bnk.ObjectSection.loopOf[desc.WemId]
+	return LoopValue{ok, times}
 }
 
 // ReplaceLoopOf replaces the loop value of the wem stored in this SoundBank at
@@ -254,27 +254,30 @@ func (bnk *File) ReplaceLoopOf(i int, loop LoopValue) {
 		return
 	}
 
-	old, oldLoops := bnk.ObjectSection.loopOf[desc.WemId]
+	oldValue, oldLoops := bnk.ObjectSection.loopOf[desc.WemId]
 	// Return if the loop values aren't changing.
 	if oldLoops == false && loop.Loops == false || ((oldLoops == loop.Loops) &&
-		old.value == loop.Value) {
+		oldValue == loop.Value) {
 		return
 	}
 
+	// The HIRC object that maps to the target wem.
+	object, ok := bnk.ObjectSection.wemToObject[desc.WemId]
+	if !ok {
+		return
+	}
+	// The sound structure that maps to the target wem.
+	ss := object.Structure
+
 	if loop.Loops == false {
 		// We are removing looping from an audio object that already has a loop.
-		object, ok := bnk.ObjectSection.wemToObject[desc.WemId]
-		if !ok {
-			return
-		}
-
-		for i, paramType := range old.parent.ParameterTypes {
+		for i, paramType := range ss.ParameterTypes {
 			if paramType == parameterLoopType {
-				old.parent.ParameterCount--
-				old.parent.ParameterTypes = append(
-					old.parent.ParameterTypes[:i], old.parent.ParameterTypes[i+1:]...)
-				old.parent.ParameterValues = append(
-					old.parent.ParameterValues[:i], old.parent.ParameterValues[i+1:]...)
+				ss.ParameterCount--
+				ss.ParameterTypes =
+					append(ss.ParameterTypes[:i], ss.ParameterTypes[i+1:]...)
+				ss.ParameterValues =
+					append(ss.ParameterValues[:i], ss.ParameterValues[i+1:]...)
 
 				lengthDecrease := uint32(PARAMETER_TYPE_BYTES + PARAMETER_VALUE_BYTES)
 				bnk.ObjectSection.Header.Length -= lengthDecrease
@@ -289,31 +292,24 @@ func (bnk *File) ReplaceLoopOf(i int, loop LoopValue) {
 		binary.LittleEndian.PutUint32(lbs[:], loop.Value)
 		if oldLoops {
 			// We are modifying the existing loop value of an audio object.
-			for i, paramType := range old.parent.ParameterTypes {
+			for i, paramType := range ss.ParameterTypes {
 				if paramType == parameterLoopType {
-					old.parent.ParameterValues[i] = lbs
-					bnk.ObjectSection.loopOf[desc.WemId] =
-						loopFacade{loop.Value, old.parent}
+					ss.ParameterValues[i] = lbs
+					bnk.ObjectSection.loopOf[desc.WemId] = loop.Value
 					return
 				}
 			}
 		} else { // oldLoops == false
 			// We are adding looping to an audio object that did not loop.
-			object, ok := bnk.ObjectSection.wemToObject[desc.WemId]
-
-			if !ok {
-				return
-			}
 			ss := object.Structure
 			ss.ParameterCount++
 			ss.ParameterTypes = append(ss.ParameterTypes, parameterLoopType)
 			ss.ParameterValues = append(ss.ParameterValues, lbs)
-			bnk.ObjectSection.loopOf[desc.WemId] = loopFacade{loop.Value, ss}
+			bnk.ObjectSection.loopOf[desc.WemId] = loop.Value
 
 			lengthIncrease := uint32(PARAMETER_TYPE_BYTES + PARAMETER_VALUE_BYTES)
 			bnk.ObjectSection.Header.Length += lengthIncrease
 			object.Descriptor.Length += lengthIncrease
-
 		}
 	}
 }
