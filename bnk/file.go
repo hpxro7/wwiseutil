@@ -263,6 +263,11 @@ func (bnk *File) ReplaceLoopOf(i int, loop LoopValue) {
 
 	if loop.Loops == false {
 		// We are removing looping from an audio object that already has a loop.
+		object, ok := bnk.ObjectSection.wemToObject[desc.WemId]
+		if !ok {
+			return
+		}
+
 		for i, paramType := range old.parent.ParameterTypes {
 			if paramType == parameterLoopType {
 				old.parent.ParameterCount--
@@ -270,6 +275,11 @@ func (bnk *File) ReplaceLoopOf(i int, loop LoopValue) {
 					old.parent.ParameterTypes[:i], old.parent.ParameterTypes[i+1:]...)
 				old.parent.ParameterValues = append(
 					old.parent.ParameterValues[:i], old.parent.ParameterValues[i+1:]...)
+
+				lengthDecrease := uint32(PARAMETER_TYPE_BYTES + PARAMETER_VALUE_BYTES)
+				bnk.ObjectSection.Header.Length -= lengthDecrease
+				object.Descriptor.Length -= lengthDecrease
+
 				delete(bnk.ObjectSection.loopOf, desc.WemId)
 				return
 			}
@@ -282,17 +292,28 @@ func (bnk *File) ReplaceLoopOf(i int, loop LoopValue) {
 			for i, paramType := range old.parent.ParameterTypes {
 				if paramType == parameterLoopType {
 					old.parent.ParameterValues[i] = lbs
+					bnk.ObjectSection.loopOf[desc.WemId] =
+						loopFacade{loop.Value, old.parent}
 					return
 				}
 			}
 		} else { // oldLoops == false
 			// We are adding looping to an audio object that did not loop.
-			old.parent.ParameterCount++
-			old.parent.ParameterTypes = append(
-				old.parent.ParameterTypes, parameterLoopType)
-			old.parent.ParameterValues = append(old.parent.ParameterValues, lbs)
-			bnk.ObjectSection.loopOf[desc.WemId] =
-				loopFacade{loop.Value, old.parent}
+			object, ok := bnk.ObjectSection.wemToObject[desc.WemId]
+
+			if !ok {
+				return
+			}
+			ss := object.Structure
+			ss.ParameterCount++
+			ss.ParameterTypes = append(ss.ParameterTypes, parameterLoopType)
+			ss.ParameterValues = append(ss.ParameterValues, lbs)
+			bnk.ObjectSection.loopOf[desc.WemId] = loopFacade{loop.Value, ss}
+
+			lengthIncrease := uint32(PARAMETER_TYPE_BYTES + PARAMETER_VALUE_BYTES)
+			bnk.ObjectSection.Header.Length += lengthIncrease
+			object.Descriptor.Length += lengthIncrease
+
 		}
 	}
 }

@@ -117,7 +117,8 @@ type ObjectHierarchySection struct {
 	objects     []Object
 	// A convenience field for accessing the loop parameters of every wem. It maps
 	// the wem id of the loop in question to a wrapper over the loop value.
-	loopOf map[uint32]loopFacade
+	loopOf      map[uint32]loopFacade
+	wemToObject map[uint32]*SfxVoiceSoundObject
 }
 
 // An UnknownSection represents an unknown section in a SoundBank file.
@@ -322,6 +323,7 @@ func (hdr *SectionHeader) NewObjectHierarchySection(sr *io.SectionReader) (*Obje
 	sec := new(ObjectHierarchySection)
 	sec.Header = hdr
 	sec.loopOf = make(map[uint32]loopFacade)
+	sec.wemToObject = make(map[uint32]*SfxVoiceSoundObject)
 
 	var count uint32
 	err := binary.Read(sr, binary.LittleEndian, &count)
@@ -343,6 +345,7 @@ func (hdr *SectionHeader) NewObjectHierarchySection(sr *io.SectionReader) (*Obje
 				return nil, err
 			}
 
+			sec.wemToObject[obj.WemDescriptor.WemId] = obj
 			if obj.Structure.loops {
 				sec.loopOf[obj.WemDescriptor.WemId] =
 					loopFacade{obj.Structure.loopCount, obj.Structure}

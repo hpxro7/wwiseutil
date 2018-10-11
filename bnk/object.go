@@ -16,6 +16,7 @@ const OVERRIDE_EFFECTS_BYTES = 1
 const SFX_UNKNOWN_BYTES = 5
 const OPTIONAL_WEM_DESCRIPTOR_BYTES = 8
 const EFFECT_BYTES = 7
+const PARAMETER_TYPE_BYTES = 1
 const PARAMETER_VALUE_BYTES = 4
 const STRUCTURE_UNKNOWN_BYTES = 10
 
@@ -298,7 +299,7 @@ func (ss *SoundStructure) WriteTo(w io.Writer) (written int64, err error) {
 	if err != nil {
 		return
 	}
-	written += 1
+	written += PARAMETER_TYPE_BYTES
 
 	err = binary.Write(w, binary.LittleEndian, ss.ParameterTypes)
 	if err != nil {
