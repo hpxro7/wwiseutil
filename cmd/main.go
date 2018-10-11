@@ -23,7 +23,7 @@ const wemExtension = ".wem"
 
 var shouldUnpack bool
 var shouldReplace bool
-var bnkPath string
+var filePath string
 var output string
 var targetPath string
 var verbose bool
@@ -32,7 +32,7 @@ type flagError string
 
 func init() {
 	const (
-		usage    = "unpack a .bnk into seperate .wem files"
+		usage    = "unpack a .bnk or .pck into seperate .wem files"
 		flagName = "unpack"
 	)
 	flag.BoolVar(&shouldUnpack, flagName, false, usage)
@@ -41,8 +41,9 @@ func init() {
 
 func init() {
 	const (
-		usage = "replace a set of .wem files from a source .bnk file, outputing " +
-			"a fully usable .bnk with wems, offsets and lengths updated."
+		usage = "replace a set of .wem files from a source .bnk or .pck file, " +
+			"outputing a fully usable .bnk or .pck with wems, offsets and lengths " +
+			"updated."
 		flagName = "replace"
 	)
 	flag.BoolVar(&shouldReplace, flagName, false, usage)
@@ -51,21 +52,21 @@ func init() {
 
 func init() {
 	const (
-		usage = "the path to the source .bnk. When unpack is used, this is the " +
-			"bnk file to unpack. When replace is used, this .bnk is used as a " +
-			"source; the wem files, offsets and lengths of this .bnk will updated " +
-			"and written to the file specified by output."
-		flagName = "bnkpath"
+		usage = "the path to the source .bnk or .pck. When unpack is used, this " +
+			"is the bnk or pck file to unpack. When replace is used, this .bnk or " +
+			".pck is used as a source; the wem files, offsets and lengths of this " +
+			".bnk or .pck will updated and written to the file specified by output."
+		flagName = "filepath"
 	)
-	flag.StringVar(&bnkPath, flagName, "", usage)
-	flag.StringVar(&bnkPath, "b", "", shorthandDesc(flagName))
+	flag.StringVar(&filePath, flagName, "", usage)
+	flag.StringVar(&filePath, "f", "", shorthandDesc(flagName))
 }
 
 func init() {
 	const (
 		usage = "When unpack is used, this is the directory to output unpacked " +
 			".wem files. When replace is used, this is the directory to output the " +
-			"updated .bnk."
+			"updated .bnk or .pck."
 		flagName = "output"
 	)
 	flag.StringVar(&output, flagName, "", usage)
@@ -76,10 +77,11 @@ func init() {
 	const (
 		usage = "The directory to find .wem files in for replacing. Each wem " +
 			"file's name must be a number corresponding to the index of the wem " +
-			"file to replace from the source SoundBank. The index of the first wem " +
-			"file is 1. The wems in the source SoundBank will be replaced with the " +
-			"wems in this directory. These wems must not be padded ahead of time. " +
-			"This tool will automatically add any padding needed."
+			"file to replace from the source SoundBank or File Package. The index " +
+			"of the first wem file is 1. The wems in the source SoundBank will be " +
+			"replaced with the wems in this directory. These wems must not be " +
+			"padded ahead of time; this tool will automatically add any padding " +
+			"needed."
 		flagName = "target"
 	)
 	flag.StringVar(&targetPath, flagName, "", usage)
@@ -89,7 +91,7 @@ func init() {
 func init() {
 	const (
 		usage = "Shows additional information about the strcuture of the parsed " +
-			"SoundBank file."
+			"SoundBank or File Package file."
 		flagName = "verbose"
 	)
 	flag.BoolVar(&verbose, flagName, false, usage)
@@ -107,7 +109,7 @@ func verifyFlags() {
 		err = "Either unpack or replace should be specified"
 	case shouldUnpack && shouldReplace:
 		err = "Both unpack and replace cannot be specified"
-	case bnkPath == "":
+	case filePath == "":
 		err = "bnkpath cannot be empty"
 	case output == "":
 		err = "output cannot be empty"
@@ -133,10 +135,10 @@ func verifyReplaceFlags() {
 }
 
 func unpack() {
-	bnk, err := bnk.Open(bnkPath)
+	bnk, err := bnk.Open(filePath)
 	defer bnk.Close()
 	if err != nil {
-		log.Fatalln("Could not parse .bnk file:", err)
+		log.Fatalln("Could not parse .bnk or .pck file:", err)
 	}
 	if verbose {
 		fmt.Println(bnk)
@@ -165,10 +167,10 @@ func unpack() {
 }
 
 func replace() {
-	bnk, err := bnk.Open(bnkPath)
+	bnk, err := bnk.Open(filePath)
 	defer bnk.Close()
 	if err != nil {
-		log.Fatalln("Could not parse .bnk file:", err)
+		log.Fatalln("Could not parse .bnk or .pck file:", err)
 	}
 	if verbose {
 		fmt.Println(bnk)
@@ -188,9 +190,9 @@ func replace() {
 	}
 	total, err := bnk.WriteTo(outputFile)
 	if err != nil {
-		log.Fatalln("Could not write SoundBank to file: ", err)
+		log.Fatalln("Could not write output to file: ", err)
 	}
-	fmt.Println("Sucessfuly replaced! SoundBank file written to:", output)
+	fmt.Println("Sucessfuly replaced! Output file written to:", output)
 	fmt.Printf("Wrote %d bytes in total\n", total)
 }
 
@@ -215,7 +217,7 @@ func processTargetFiles(b *bnk.File, fis []os.FileInfo) []*wwise.ReplacementWem 
 			continue
 		}
 		if wemIndex < 0 || wemIndex >= b.IndexSection.WemCount {
-			log.Printf("Ignoring %s: This SoundBank's valid index range is "+
+			log.Printf("Ignoring %s: This files's valid index range is "+
 				"%d to %d", name, 1, b.IndexSection.WemCount)
 			continue
 		}
