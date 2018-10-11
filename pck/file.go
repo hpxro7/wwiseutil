@@ -3,6 +3,8 @@ package pck
 
 import (
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"io"
 	"math"
 	"os"
@@ -24,6 +26,8 @@ type File struct {
 	closer  io.Closer
 	Header  *Header
 	Indexes []*DataIndex
+	Padding uint32
+	wems    []*wwise.Wem
 }
 
 // A Header represents a single Wwise File Package header.
@@ -56,12 +60,29 @@ func NewFile(r io.ReaderAt) (*File, error) {
 	}
 	pck.Header = hdr
 
+	// Read in the data index.
 	for i := uint32(0); i < pck.Header.WemCount; i++ {
 		idx, err := NewDataIndex(sr)
 		if err != nil {
 			return nil, err
 		}
 		pck.Indexes = append(pck.Indexes, idx)
+	}
+
+	var padding uint32
+	err = binary.Read(sr, binary.LittleEndian, &padding)
+	if err != nil {
+		return nil, err
+	}
+	pck.Padding = padding
+
+	// Read in the data contained within this File Package
+	for _, idx := range pck.Indexes {
+		wem, err := newWem(sr, idx)
+		if err != nil {
+			return nil, err
+		}
+		pck.wems = append(pck.wems, wem)
 	}
 
 	return pck, nil
@@ -81,6 +102,21 @@ func (pck *File) WriteTo(w io.Writer) (written int64, err error) {
 		}
 		written += n
 	}
+
+	err = binary.Write(w, binary.LittleEndian, pck.Padding)
+	if err != nil {
+		return
+	}
+	written += int64(4)
+
+	for _, wem := range pck.wems {
+		n, err := io.Copy(w, wem)
+		if err != nil {
+			return written, err
+		}
+		written += int64(n)
+	}
+
 	return written, nil
 }
 
@@ -113,7 +149,7 @@ func (pck *File) Close() error {
 }
 
 func (pck *File) Wems() []*wwise.Wem {
-	return nil
+	return pck.wems
 }
 
 func (pck *File) ReplaceWems(rs ...*wwise.ReplacementWem) {
@@ -211,4 +247,19 @@ func (idx *DataIndex) WriteTo(w io.Writer) (written int64, err error) {
 	written += int64(4)
 
 	return written, nil
+}
+
+func newWem(sr util.ReadSeekerAt, idx *DataIndex) (*wwise.Wem, error) {
+	offset, _ := sr.Seek(0, io.SeekCurrent)
+	desc := idx.Descriptor
+	if uint32(offset) != desc.Offset {
+		msg := fmt.Sprintf("Wem %d was expected to start at offset %d "+
+			"but instead started at offset %d", desc.WemId, desc.Offset, offset)
+		return nil, errors.New(msg)
+	}
+
+	wemReader := util.NewResettingReader(sr, offset, int64(desc.Length))
+	padding := util.NewResettingReader(&util.InfiniteReaderAt{0}, 0, 0)
+	sr.Seek(int64(desc.Length), io.SeekCurrent)
+	return &wwise.Wem{wemReader, desc, padding}, nil
 }
