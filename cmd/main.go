@@ -135,13 +135,13 @@ func verifyReplaceFlags() {
 }
 
 func unpack() {
-	bnk, err := bnk.Open(filePath)
-	defer bnk.Close()
+	ctn, err := bnk.Open(filePath)
+	defer ctn.Close()
 	if err != nil {
 		log.Fatalln("Could not parse .bnk or .pck file:", err)
 	}
 	if verbose {
-		fmt.Println(bnk)
+		fmt.Println(ctn)
 	}
 
 	err = createDirIfEmpty(output)
@@ -149,8 +149,8 @@ func unpack() {
 		log.Fatalln("Could not create output directory:", err)
 	}
 	total := int64(0)
-	for i, wem := range bnk.DataSection.Wems {
-		filename := util.CanonicalWemName(i, bnk.IndexSection.WemCount)
+	for i, wem := range ctn.DataSection.Wems {
+		filename := util.CanonicalWemName(i, len(ctn.Wems()))
 		f, err := os.Create(filepath.Join(output, filename))
 		if err != nil {
 			log.Fatalf("Could not create wem file \"%s\": %s", filename, err)
@@ -161,34 +161,34 @@ func unpack() {
 		}
 		total += n
 	}
-	fmt.Printf("Successfully wrote %d wem(s) to %s\n", len(bnk.DataSection.Wems),
+	fmt.Printf("Successfully wrote %d wem(s) to %s\n", len(ctn.Wems()),
 		output)
 	fmt.Printf("Wrote %d bytes in total\n", total)
 }
 
 func replace() {
-	bnk, err := bnk.Open(filePath)
-	defer bnk.Close()
+	ctn, err := bnk.Open(filePath)
+	defer ctn.Close()
 	if err != nil {
 		log.Fatalln("Could not parse .bnk or .pck file:", err)
 	}
 	if verbose {
-		fmt.Println(bnk)
+		fmt.Println(ctn)
 	}
 
 	targetFileInfos, err := ioutil.ReadDir(targetPath)
 	if err != nil {
 		log.Fatalf("Could not open target directory, \"%s\": %s\n", targetPath, err)
 	}
-	targets := processTargetFiles(bnk, targetFileInfos)
+	targets := processTargetFiles(ctn, targetFileInfos)
 
-	bnk.ReplaceWems(targets...)
+	ctn.ReplaceWems(targets...)
 
 	outputFile, err := os.Create(output)
 	if err != nil {
 		log.Fatalf("Could not create output file \"%s\": %s\n", output, err)
 	}
-	total, err := bnk.WriteTo(outputFile)
+	total, err := ctn.WriteTo(outputFile)
 	if err != nil {
 		log.Fatalln("Could not write output to file: ", err)
 	}
@@ -196,7 +196,8 @@ func replace() {
 	fmt.Printf("Wrote %d bytes in total\n", total)
 }
 
-func processTargetFiles(b *bnk.File, fis []os.FileInfo) []*wwise.ReplacementWem {
+func processTargetFiles(c wwise.Container,
+	fis []os.FileInfo) []*wwise.ReplacementWem {
 	var targets []*wwise.ReplacementWem
 	var names []string
 	for _, fi := range fis {
@@ -216,9 +217,9 @@ func processTargetFiles(b *bnk.File, fis []os.FileInfo) []*wwise.ReplacementWem 
 				name)
 			continue
 		}
-		if wemIndex < 0 || wemIndex >= b.IndexSection.WemCount {
+		if wemIndex < 0 || wemIndex >= len(c.Wems()) {
 			log.Printf("Ignoring %s: This files's valid index range is "+
-				"%d to %d", name, 1, b.IndexSection.WemCount)
+				"%d to %d", name, 1, len(c.Wems()))
 			continue
 		}
 		f, err := os.Open(filepath.Join(targetPath, name))
