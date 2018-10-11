@@ -41,6 +41,7 @@ type DataIndex struct {
 	Type uint32
 	// A descriptor of the wem contained at this location, if it is a wem.
 	Descriptor *wwise.WemDescriptor
+	Unknown    uint32
 }
 
 // NewFile creates a new File for access Wwise File Package files. The file is
@@ -166,7 +167,14 @@ func NewDataIndex(sr util.ReadSeekerAt) (*DataIndex, error) {
 		return nil, err
 	}
 
-	return &DataIndex{dataType, &wwise.WemDescriptor{id, offset, length}}, nil
+	var unknown uint32
+	err = binary.Read(sr, binary.LittleEndian, &unknown)
+	if err != nil {
+		return nil, err
+	}
+
+	desc := wwise.WemDescriptor{id, offset, length}
+	return &DataIndex{dataType, &desc, unknown}, nil
 }
 
 // WriteTo writes the full contents of this DataIndex to the Writer specified by
@@ -191,6 +199,12 @@ func (idx *DataIndex) WriteTo(w io.Writer) (written int64, err error) {
 	written += int64(4)
 
 	err = binary.Write(w, binary.LittleEndian, idx.Descriptor.Offset)
+	if err != nil {
+		return
+	}
+	written += int64(4)
+
+	err = binary.Write(w, binary.LittleEndian, idx.Unknown)
 	if err != nil {
 		return
 	}
