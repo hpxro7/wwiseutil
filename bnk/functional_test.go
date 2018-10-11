@@ -11,6 +11,10 @@ import (
 	"testing"
 )
 
+import (
+	"github.com/hpxro7/bnkutil/wwise"
+)
+
 const (
 	testDir = "testdata"
 
@@ -81,7 +85,7 @@ func TestReplaceFirstWemWithSmaller(t *testing.T) {
 		t.Error(err)
 	}
 	stat, _ := wem.Stat()
-	bnk.ReplaceWems(&ReplacementWem{wem, 0, stat.Size()})
+	bnk.ReplaceWems(&wwise.ReplacementWem{wem, 0, stat.Size()})
 
 	expect, err := os.Open(filepath.Join(testDir, "0_replaced_with_smaller.bnk"))
 	if err != nil {
@@ -103,7 +107,7 @@ func TestReplaceFirstWemWithLargerTwice(t *testing.T) {
 		t.Error(err)
 	}
 	stat, _ := wem.Stat()
-	bnk.ReplaceWems(&ReplacementWem{wem, 0, stat.Size()})
+	bnk.ReplaceWems(&wwise.ReplacementWem{wem, 0, stat.Size()})
 
 	expect, err := os.Open(filepath.Join(testDir, "0_replaced_with_larger.bnk"))
 	if err != nil {
@@ -130,7 +134,7 @@ func TestReplaceFirstWemWithLarger(t *testing.T) {
 		t.Error(err)
 	}
 	stat, _ := wem.Stat()
-	bnk.ReplaceWems(&ReplacementWem{wem, 0, stat.Size()})
+	bnk.ReplaceWems(&wwise.ReplacementWem{wem, 0, stat.Size()})
 
 	expect, err := os.Open(filepath.Join(testDir, "0_replaced_with_larger.bnk"))
 	if err != nil {

@@ -10,6 +10,7 @@ import (
 
 import (
 	"github.com/hpxro7/bnkutil/util"
+	"github.com/hpxro7/bnkutil/wwise"
 )
 
 // The number of bytes used to describe the header of a section.
@@ -71,7 +72,7 @@ type DataIndexSection struct {
 	// A list of all wem IDs, in order of their offset into the file.
 	WemIds []uint32
 	// A mapping from wem ID to its descriptor.
-	DescriptorMap map[uint32]*WemDescriptor
+	DescriptorMap map[uint32]*wwise.WemDescriptor
 }
 
 // A DataIndexSection represents the DATA section of a SoundBank file.
@@ -80,34 +81,7 @@ type DataSection struct {
 	// The offset into the file where the data portion of the DATA section begins.
 	// This is the location where wem entries are stored.
 	DataStart uint32
-	Wems      []*Wem
-}
-
-// A Wem represents a single sound entity contained within a SoundBank file.
-type Wem struct {
-	io.Reader
-	Descriptor *WemDescriptor
-	// A reader over the bytes that remain until the next wem if there is one, or
-	// the end of the data section. These bytes are NUL(0x00) padding up until the
-	// next 16-aligned byte (i.e. nextWem.Offset % 16 = 0).
-	Padding util.ReadSeekerAt
-}
-
-// A WemDescriptor represents the location of a single wem entity within the
-// SoundBank DATA section.
-type WemDescriptor struct {
-	WemId uint32
-	// The number of bytes from the start of the DATA section's data (after the
-	// header and length) that this wem begins.
-	Offset uint32
-	// The length in bytes of this wem.
-	Length uint32
-}
-
-// A loopFacade is a wrapper over a loop value, with a reference to the
-// parent SoundStructure to be able to edit it.
-type loopFacade struct {
-	parent *SoundStructure
+	Wems      []*wwise.Wem
 }
 
 // A ObjectHierarchySection represents the HIRC section of a SoundBank file,
@@ -191,9 +165,9 @@ func (hdr *SectionHeader) NewDataIndexSection(r io.Reader) (*DataIndexSection, e
 	}
 	wemCount := int(hdr.Length / DIDX_ENTRY_BYTES)
 	sec := DataIndexSection{hdr, wemCount, make([]uint32, 0),
-		make(map[uint32]*WemDescriptor)}
+		make(map[uint32]*wwise.WemDescriptor)}
 	for i := 0; i < wemCount; i++ {
-		var desc WemDescriptor
+		var desc wwise.WemDescriptor
 		err := binary.Read(r, binary.LittleEndian, &desc)
 		if err != nil {
 			return nil, err
@@ -253,7 +227,7 @@ func (hdr *SectionHeader) NewDataSection(sr util.ReadSeekerAt,
 	}
 	dataOffset, _ := sr.Seek(0, io.SeekCurrent)
 
-	sec := DataSection{hdr, uint32(dataOffset), make([]*Wem, 0)}
+	sec := DataSection{hdr, uint32(dataOffset), make([]*wwise.Wem, 0)}
 	for i, id := range idx.WemIds {
 		desc := idx.DescriptorMap[id]
 		wemStartOffset := dataOffset + int64(desc.Offset)
@@ -280,7 +254,7 @@ func (hdr *SectionHeader) NewDataSection(sr util.ReadSeekerAt,
 			padding = util.NewResettingReader(sr, wemEndOffset, remaining)
 		}
 
-		wem := Wem{wemReader, desc, padding}
+		wem := wwise.Wem{wemReader, desc, padding}
 		sec.Wems = append(sec.Wems, &wem)
 	}
 

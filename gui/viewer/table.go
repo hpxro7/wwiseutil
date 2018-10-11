@@ -7,6 +7,7 @@ import (
 import (
 	"github.com/hpxro7/bnkutil/bnk"
 	"github.com/hpxro7/bnkutil/util"
+	"github.com/hpxro7/bnkutil/wwise"
 	"github.com/therecipe/qt/core"
 	"github.com/therecipe/qt/widgets"
 )
@@ -20,7 +21,7 @@ type columnBinding struct {
 
 type replacementWemWrapper struct {
 	name        string
-	replacement *bnk.ReplacementWem
+	replacement *wwise.ReplacementWem
 }
 
 type loopWrapper struct {
@@ -73,7 +74,7 @@ func (t *WemTable) UpdateWems(file *bnk.File) {
 	t.SetModel(t.model)
 }
 
-func (t *WemTable) AddWemReplacement(name string, r *bnk.ReplacementWem) {
+func (t *WemTable) AddWemReplacement(name string, r *wwise.ReplacementWem) {
 	t.model.replacements[r.WemIndex] = &replacementWemWrapper{name, r}
 	// Modify the entire row for that wem.
 	t.refreshRow(r.WemIndex)
@@ -96,7 +97,7 @@ func (t *WemTable) UpdateLoop(wemIndex int, r *loopWrapper) {
 // Pending replacements are removed, and the table is refreshed. The number
 // of replacements commited is returned.
 func (t *WemTable) CommitReplacements() int {
-	var rs []*bnk.ReplacementWem
+	var rs []*wwise.ReplacementWem
 	for _, w := range t.model.replacements {
 		rs = append(rs, w.replacement)
 	}
@@ -168,7 +169,7 @@ func empty(index int) string {
 }
 
 func (m *WemModel) wemName(index int) string {
-	return util.CanonicalWemName(index, len(m.bnk.DataSection.Wems))
+	return util.CanonicalWemName(index, len(m.bnk.Wems()))
 }
 
 func (m *WemModel) wemReplacement(index int) string {
@@ -180,17 +181,17 @@ func (m *WemModel) wemReplacement(index int) string {
 }
 
 func (m *WemModel) wemSize(index int) string {
-	return fmt.Sprintf("%d bytes", m.bnk.DataSection.Wems[index].Descriptor.Length)
+	return fmt.Sprintf("%d bytes", m.bnk.Wems()[index].Descriptor.Length)
 }
 
 func (m *WemModel) wemOffset(index int) string {
-	sec := m.bnk.DataSection
-	offsetIntoFile := sec.Wems[index].Descriptor.Offset + sec.DataStart
+	wems := m.bnk.Wems()
+	offsetIntoFile := wems[index].Descriptor.Offset + m.bnk.DataStart()
 	return fmt.Sprintf("0x%X", offsetIntoFile)
 }
 
 func (m *WemModel) wemPadding(index int) string {
-	paddingSize := m.bnk.DataSection.Wems[index].Padding.Size()
+	paddingSize := m.bnk.Wems()[index].Padding.Size()
 	return fmt.Sprintf("%d bytes", paddingSize)
 }
 
@@ -221,8 +222,8 @@ func (m *WemModel) columnCount(parent *core.QModelIndex) int {
 
 func (m *WemModel) data(index *core.QModelIndex,
 	role int) *core.QVariant {
-	if !index.IsValid() || m.bnk == nil || m.bnk.DataSection == nil ||
-		index.Row() >= len(m.bnk.DataSection.Wems) ||
+	if !index.IsValid() || m.bnk == nil || len(m.bnk.Wems()) == 0 ||
+		index.Row() >= len(m.bnk.Wems()) ||
 		role != int(core.Qt__DisplayRole) {
 		return core.NewQVariant()
 	}

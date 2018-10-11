@@ -12,6 +12,7 @@ import (
 import (
 	"github.com/hpxro7/bnkutil/bnk"
 	"github.com/hpxro7/bnkutil/util"
+	"github.com/hpxro7/bnkutil/wwise"
 	"github.com/therecipe/qt/core"
 	"github.com/therecipe/qt/gui"
 	"github.com/therecipe/qt/widgets"
@@ -171,7 +172,7 @@ func (wv *WwiseViewerWindow) addReplacement(index int, path string) {
 	if err != nil {
 		wv.showOpenError(path, err)
 	}
-	r := &bnk.ReplacementWem{wem, index, stat.Size()}
+	r := &wwise.ReplacementWem{wem, index, stat.Size()}
 	wv.table.AddWemReplacement(stat.Name(), r)
 }
 
@@ -286,8 +287,8 @@ func (wv *WwiseViewerWindow) setLoopValues(wemIndex int) {
 func (wv *WwiseViewerWindow) exportBnk(dir string) {
 	total := int64(0)
 	bnk := wv.table.GetSoundBank()
-	for i, wem := range bnk.DataSection.Wems {
-		filename := util.CanonicalWemName(i, bnk.IndexSection.WemCount)
+	for i, wem := range bnk.Wems() {
+		filename := util.CanonicalWemName(i, len(bnk.Wems()))
 		f, err := os.Create(filepath.Join(dir, filename))
 		if err != nil {
 			wv.showExportError(filename, dir, err)
@@ -301,7 +302,7 @@ func (wv *WwiseViewerWindow) exportBnk(dir string) {
 		total += n
 	}
 
-	count := len(bnk.DataSection.Wems)
+	count := len(bnk.Wems())
 	msg := fmt.Sprintf("Successfully exported wems to %s.\n"+
 		"%d wems have been exported.\n"+
 		"%d bytes have been written.", dir, count, total)
