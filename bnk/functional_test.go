@@ -12,9 +12,16 @@ import (
 )
 
 const (
-	testDir          = "testdata"
+	testDir = "testdata"
+
 	simpleSoundBank  = "simple.bnk"
 	complexSoundBank = "complex.bnk"
+
+	loopNoneSoundBank     = "loop_none.bnk"
+	loop2SoundBank        = "loop_2.bnk"
+	loop23SoundBank       = "loop_23.bnk"
+	loopInfinitySoundBank = "loop_infinity.bnk"
+
 	// This wem is smaller than the wem at index 0 of simpleSoundBank
 	smallerWem = "small.wem"
 	// This wem is larger than the wem at index 0 of simpleSoundBank
@@ -30,9 +37,7 @@ func TestComplexUnchangedFileIsEqual(t *testing.T) {
 }
 
 func unchangedFileIsEqual(name string, t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping large file comparison test.")
-	}
+	skipIfShort(t)
 
 	f, err := os.Open(filepath.Join(testDir, name))
 	if err != nil {
@@ -46,9 +51,7 @@ func unchangedFileIsEqual(name string, t *testing.T) {
 }
 
 func TestReplaceFirstWemWithSmaller(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping large file comparison test.")
-	}
+	skipIfShort(t)
 
 	bnk, err := Open(filepath.Join(testDir, complexSoundBank))
 	if err != nil {
@@ -70,9 +73,7 @@ func TestReplaceFirstWemWithSmaller(t *testing.T) {
 }
 
 func TestReplaceFirstWemWithLarger(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping large file comparison test.")
-	}
+	skipIfShort(t)
 
 	bnk, err := Open(filepath.Join(testDir, complexSoundBank))
 	if err != nil {
@@ -143,5 +144,52 @@ func AssertSoundBankEqualToFile(t *testing.T, f *os.File, bnk *File) {
 	}
 	if !equal {
 		t.Error("The two files have the same size but are not equal.")
+	}
+}
+
+func TestRegularLoopCases(t *testing.T) {
+	skipIfShort(t)
+
+	type loopCase struct {
+		input      string
+		loopChange LoopValue
+		expected   string
+	}
+
+	inputs := []string{loop2SoundBank, loopNoneSoundBank, loopInfinitySoundBank}
+	var cases []loopCase
+
+	for _, input := range inputs {
+		cases = append(cases,
+			loopCase{input, LoopValue{false, 0}, loopNoneSoundBank})
+		cases = append(cases,
+			loopCase{input, LoopValue{true, 23}, loop23SoundBank})
+		cases = append(cases,
+			loopCase{input, LoopValue{true, 0}, loopInfinitySoundBank})
+		cases = append(cases,
+			loopCase{input, LoopValue{true, 2}, loop2SoundBank})
+	}
+
+	for _, c := range cases {
+		bnk, err := Open(filepath.Join(testDir, c.input))
+		if err != nil {
+			t.Error(err)
+			t.FailNow()
+		}
+		bnk.ReplaceLoopOf(0, c.loopChange)
+
+		expect, err := os.Open(filepath.Join(testDir, c.expected))
+		if err != nil {
+			t.Error(err)
+			t.FailNow()
+		}
+
+		AssertSoundBankEqualToFile(t, expect, bnk)
+	}
+}
+
+func skipIfShort(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping large file comparison test.")
 	}
 }
