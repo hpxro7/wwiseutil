@@ -147,7 +147,7 @@ func AssertSoundBankEqualToFile(t *testing.T, f *os.File, bnk *File) {
 	}
 }
 
-func TestRegularLoopCases(t *testing.T) {
+func TestReplaceLoopOfCases(t *testing.T) {
 	skipIfShort(t)
 
 	type loopCase struct {
