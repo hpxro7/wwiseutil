@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"strings"
 )
 
 import (
@@ -158,6 +159,26 @@ func (pck *File) ReplaceWems(rs ...*wwise.ReplacementWem) {
 
 func (pck *File) DataStart() uint32 {
 	return 0
+}
+
+func (pck *File) String() string {
+	b := new(strings.Builder)
+
+	tableParams := []string{"%-7", "%-15", "%-15", "%-8", "\n"}
+	titleFmt := strings.Join(tableParams, "s|")
+	wemFmt := strings.Join(tableParams, "d|")
+	title := fmt.Sprintf(titleFmt,
+		"Index", "Id", "Offset", "Length")
+	fmt.Fprint(b, title)
+	fmt.Fprintln(b, strings.Repeat("-", len(title)-1))
+
+	for i, idx := range pck.Indexes {
+		desc := idx.Descriptor
+
+		fmt.Fprintf(b, wemFmt, i+1, desc.WemId, desc.Offset, desc.Length)
+	}
+
+	return b.String()
 }
 
 func NewHeader(sr util.ReadSeekerAt) (*Header, error) {

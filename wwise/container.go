@@ -3,6 +3,7 @@
 package wwise
 
 import (
+	"fmt"
 	"io"
 	"sort"
 )
@@ -12,6 +13,9 @@ import (
 )
 
 type Container interface {
+	io.WriterTo
+	fmt.Stringer
+
 	// Wems returns a list of pointers to wems stored in this container. The
 	// pointers should point directly to the wem objects used by the container;
 	// modifying the contents of these wems should modify the original container.
