@@ -49,8 +49,7 @@ func NewFile(r io.ReaderAt) (*File, error) {
 	pck := new(File)
 	sr := io.NewSectionReader(r, 0, math.MaxInt64)
 
-	hdr := new(Header)
-	err := binary.Read(sr, binary.LittleEndian, hdr)
+	hdr, err := NewHeader(sr)
 	if err != nil {
 		return nil, err
 	}
@@ -69,11 +68,10 @@ func NewFile(r io.ReaderAt) (*File, error) {
 
 // WriteTo writes the full contents of this File to the Writer specified by w.
 func (pck *File) WriteTo(w io.Writer) (written int64, err error) {
-	err = binary.Write(w, binary.LittleEndian, pck.Header)
+	written, err = pck.Header.WriteTo(w)
 	if err != nil {
 		return
 	}
-	written = int64(HEADER_BYTES)
 
 	for _, idx := range pck.Indexes {
 		n, err := idx.WriteTo(w)
@@ -123,6 +121,24 @@ func (pck *File) ReplaceWems(rs ...*wwise.ReplacementWem) {
 
 func (pck *File) DataStart() uint32 {
 	return 0
+}
+
+func NewHeader(sr util.ReadSeekerAt) (*Header, error) {
+	hdr := new(Header)
+	err := binary.Read(sr, binary.LittleEndian, hdr)
+	if err != nil {
+		return nil, err
+	}
+	return hdr, nil
+}
+
+func (hdr *Header) WriteTo(w io.Writer) (written int64, err error) {
+	err = binary.Write(w, binary.LittleEndian, hdr)
+	if err != nil {
+		return
+	}
+	written = int64(HEADER_BYTES)
+	return
 }
 
 func NewDataIndex(sr util.ReadSeekerAt) (*DataIndex, error) {
