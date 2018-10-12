@@ -38,3 +38,22 @@ func unchangedFileIsEqual(name string, t *testing.T) {
 	}
 	wwise.AssertContainerEqualToFile(t, f, pck)
 }
+
+func TestUnchangedWriteFileTwiceIsEqual(t *testing.T) {
+	util.SkipIfShort(t)
+
+	f, err := os.Open(filepath.Join(testDir, simpleFilePackage))
+	if err != nil {
+		t.Error(err)
+	}
+	pck, err := NewFile(f)
+	if err != nil {
+		t.Error(err)
+	}
+	wwise.AssertContainerEqualToFile(t, f, pck)
+	f, err = os.Open(filepath.Join(testDir, simpleFilePackage))
+	if err != nil {
+		t.Error(err)
+	}
+	wwise.AssertContainerEqualToFile(t, f, pck)
+}
