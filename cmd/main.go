@@ -13,10 +13,10 @@ import (
 )
 
 import (
-	"github.com/hpxro7/bnkutil/bnk"
-	"github.com/hpxro7/bnkutil/pck"
-	"github.com/hpxro7/bnkutil/util"
-	"github.com/hpxro7/bnkutil/wwise"
+	"github.com/hpxro7/wwiseutil/bnk"
+	"github.com/hpxro7/wwiseutil/pck"
+	"github.com/hpxro7/wwiseutil/util"
+	"github.com/hpxro7/wwiseutil/wwise"
 )
 
 const shorthandSuffix = " (shorthand)"

@@ -9,8 +9,8 @@ import (
 )
 
 import (
-	"github.com/hpxro7/bnkutil/util"
-	"github.com/hpxro7/bnkutil/wwise"
+	"github.com/hpxro7/wwiseutil/util"
+	"github.com/hpxro7/wwiseutil/wwise"
 )
 
 const (

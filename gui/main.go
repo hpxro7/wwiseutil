@@ -6,7 +6,7 @@ import (
 )
 
 import (
-	"github.com/hpxro7/bnkutil/gui/viewer"
+	"github.com/hpxro7/wwiseutil/gui/viewer"
 	"github.com/therecipe/qt/core"
 	"github.com/therecipe/qt/widgets"
 )
@@ -17,10 +17,10 @@ const (
 )
 
 func main() {
-	log.Println("Starting bnkutil GUI...")
+	log.Println("Starting wwiseutil GUI...")
 	app := widgets.NewQApplication(len(os.Args), os.Args)
 	core.QCoreApplication_SetApplicationName("Wwise Audio Utilities")
-	core.QCoreApplication_SetApplicationVersion("0.3")
+	core.QCoreApplication_SetApplicationVersion("1.0")
 
 	parser := core.NewQCommandLineParser()
 	parser.SetApplicationDescription(core.QCoreApplication_ApplicationName())
