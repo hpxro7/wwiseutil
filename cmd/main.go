@@ -22,9 +22,6 @@ import (
 const shorthandSuffix = " (shorthand)"
 const wemExtension = ".wem"
 
-var soundBankExtensions = []string{".nbnk", ".bnk"}
-var filePackageExtensions = []string{".npck", ".pck"}
-
 var shouldUnpack bool
 var shouldReplace bool
 var filePath string
@@ -141,23 +138,14 @@ func verifyReplaceFlags() {
 // Verifies that the extension of the input file is supported. Returns true if
 // the file is a SoundBank file and false if it is a File Package file.
 func verifyInputType() bool {
-	ext := filepath.Ext(filePath)
-	isSoundBank := contains(soundBankExtensions, ext)
-	isFilePath := contains(filePackageExtensions, ext)
+	fileType, ext := util.GetFileType(filePath)
+	isSoundBank := fileType == util.SoundBankFileType
+	isFilePath := fileType == util.FilePackageFileType
 	if !(isSoundBank || isFilePath) {
 		flag.Usage()
 		log.Fatal(ext, ", is not a supported input file type")
 	}
 	return isSoundBank
-}
-
-func contains(sources []string, target string) bool {
-	for _, s := range sources {
-		if s == target {
-			return true
-		}
-	}
-	return false
 }
 
 func unpack(isSoundBank bool) {
