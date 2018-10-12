@@ -79,10 +79,15 @@ func NewFile(r io.ReaderAt) (*File, error) {
 
 	// Read in the data contained within this File Package
 	for i, idx := range pck.Indexes {
-		nextOffset := uint32(0)
+		var nextOffset uint32
 		if i+1 < len(pck.Indexes) {
+			// There is a subsequent wem, use it to find the next offset.
 			nextOffset = pck.Indexes[i+1].Descriptor.Offset
+		} else {
+			// This is the last wem, the next offset will be the end of the wem.
+			nextOffset = idx.Descriptor.Length + idx.Descriptor.Offset
 		}
+
 		wem, err := newWem(sr, idx, nextOffset)
 		if err != nil {
 			return nil, err
