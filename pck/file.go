@@ -78,8 +78,12 @@ func NewFile(r io.ReaderAt) (*File, error) {
 	pck.Padding = padding
 
 	// Read in the data contained within this File Package
-	for _, idx := range pck.Indexes {
-		wem, err := newWem(sr, idx)
+	for i, idx := range pck.Indexes {
+		nextOffset := uint32(0)
+		if i+1 < len(pck.Indexes) {
+			nextOffset = pck.Indexes[i+1].Descriptor.Offset
+		}
+		wem, err := newWem(sr, idx, nextOffset)
 		if err != nil {
 			return nil, err
 		}
@@ -112,6 +116,11 @@ func (pck *File) WriteTo(w io.Writer) (written int64, err error) {
 
 	for _, wem := range pck.wems {
 		n, err := io.Copy(w, wem)
+		if err != nil {
+			return written, err
+		}
+		written += int64(n)
+		n, err = io.Copy(w, wem.Padding)
 		if err != nil {
 			return written, err
 		}
@@ -154,7 +163,7 @@ func (pck *File) Wems() []*wwise.Wem {
 }
 
 func (pck *File) ReplaceWems(rs ...*wwise.ReplacementWem) {
-	wwise.ReplaceWems(pck, rs...)
+	wwise.ReplaceWems(pck, 0, rs...)
 }
 
 func (pck *File) DataStart() uint32 {
@@ -270,17 +279,21 @@ func (idx *DataIndex) WriteTo(w io.Writer) (written int64, err error) {
 	return written, nil
 }
 
-func newWem(sr util.ReadSeekerAt, idx *DataIndex) (*wwise.Wem, error) {
-	offset, _ := sr.Seek(0, io.SeekCurrent)
+func newWem(sr util.ReadSeekerAt, idx *DataIndex,
+	nextOffset uint32) (*wwise.Wem, error) {
+	startOffset, _ := sr.Seek(0, io.SeekCurrent)
 	desc := idx.Descriptor
-	if uint32(offset) != desc.Offset {
+	if uint32(startOffset) != desc.Offset {
 		msg := fmt.Sprintf("Wem %d was expected to start at offset %d "+
-			"but instead started at offset %d", desc.WemId, desc.Offset, offset)
+			"but instead started at offset %d", desc.WemId, desc.Offset, startOffset)
 		return nil, errors.New(msg)
 	}
 
-	wemReader := util.NewResettingReader(sr, offset, int64(desc.Length))
-	padding := util.NewResettingReader(&util.InfiniteReaderAt{0}, 0, 0)
-	sr.Seek(int64(desc.Length), io.SeekCurrent)
+	wemReader := util.NewResettingReader(sr, startOffset, int64(desc.Length))
+	wemEndOffset := startOffset + int64(desc.Length)
+	remaining := int64(nextOffset) - wemEndOffset
+
+	padding := util.NewResettingReader(&util.InfiniteReaderAt{0}, 0, remaining)
+	sr.Seek(int64(desc.Length)+remaining, io.SeekCurrent)
 	return &wwise.Wem{wemReader, desc, padding}, nil
 }

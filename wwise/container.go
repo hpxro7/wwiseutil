@@ -75,8 +75,10 @@ type ByWemIndex struct {
 // ReplaceWems replaces the wems of ctn with all the replacements in rs. The
 // ctv is updated to match the new expected lengths and offsets. The amount
 // of additional space taken up by the new wems is returned. This should be
-// used to update the headers of any container as appropriate.
-func ReplaceWems(ctn Container, rs ...*ReplacementWem) int64 {
+// used to update the headers of any container as appropriate. If alignment is
+// a non-zero number, padding will be added to the end of wems so that they are
+// aligned with (offset will be divisible by) this number.
+func ReplaceWems(ctn Container, alignment int64, rs ...*ReplacementWem) int64 {
 	// Ammending offsets in case of a surplus in a single pass, in O(n) time, as
 	// opposed to O(n^2), requires that the replacements happen in the order
 	// that their wem will appear in the file; sorting them by index achives this.
@@ -93,9 +95,12 @@ func ReplaceWems(ctn Container, rs ...*ReplacementWem) int64 {
 		padding := wem.Padding.Size()
 		if newLength > oldLength {
 			surplus += newLength - oldLength
-			// Compute the new amount of padding needed to align the next offset (true
-			// end of this wem section) with 16 bytes.
-			padding = (16 - (int64(wem.Descriptor.Offset)+newLength)%16)
+			if alignment != 0 {
+				// Compute the new amount of padding needed to align the next offset
+				// (true end of this wem section) with alignment bytes.
+				padding =
+					(alignment - (int64(wem.Descriptor.Offset)+newLength)%alignment)
+			}
 			// Subsequent wem's will need to have their offsets aligned with the end
 			// of our new wem's padding. The offset difference will need to include
 			// the difference in padding between the old wem and the replacement wem.
