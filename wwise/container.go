@@ -14,6 +14,7 @@ import (
 
 type Container interface {
 	io.WriterTo
+	io.Closer
 	fmt.Stringer
 
 	// Wems returns a list of pointers to wems stored in this container. The

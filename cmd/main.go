@@ -14,12 +14,16 @@ import (
 
 import (
 	"github.com/hpxro7/bnkutil/bnk"
+	"github.com/hpxro7/bnkutil/pck"
 	"github.com/hpxro7/bnkutil/util"
 	"github.com/hpxro7/bnkutil/wwise"
 )
 
 const shorthandSuffix = " (shorthand)"
 const wemExtension = ".wem"
+
+var soundBankExtensions = []string{".nbnk", ".bnk"}
+var filePackageExtensions = []string{".npck", ".pck"}
 
 var shouldUnpack bool
 var shouldReplace bool
@@ -134,9 +138,39 @@ func verifyReplaceFlags() {
 	}
 }
 
-func unpack() {
-	ctn, err := bnk.Open(filePath)
+// Verifies that the extension of the input file is supported. Returns true if
+// the file is a SoundBank file and false if it is a File Package file.
+func verifyInputType() bool {
+	ext := filepath.Ext(filePath)
+	isSoundBank := contains(soundBankExtensions, ext)
+	isFilePath := contains(filePackageExtensions, ext)
+	if !(isSoundBank || isFilePath) {
+		flag.Usage()
+		log.Fatal(ext, ", is not a supported input file type")
+	}
+	return isSoundBank
+}
+
+func contains(sources []string, target string) bool {
+	for _, s := range sources {
+		if s == target {
+			return true
+		}
+	}
+	return false
+}
+
+func unpack(isSoundBank bool) {
+	var ctn wwise.Container
+	var err error
+
+	if isSoundBank {
+		ctn, err = bnk.Open(filePath)
+	} else { // Input is file package
+		ctn, err = pck.Open(filePath)
+	}
 	defer ctn.Close()
+
 	if err != nil {
 		log.Fatalln("Could not parse .bnk or .pck file:", err)
 	}
@@ -149,7 +183,7 @@ func unpack() {
 		log.Fatalln("Could not create output directory:", err)
 	}
 	total := int64(0)
-	for i, wem := range ctn.DataSection.Wems {
+	for i, wem := range ctn.Wems() {
 		filename := util.CanonicalWemName(i, len(ctn.Wems()))
 		f, err := os.Create(filepath.Join(output, filename))
 		if err != nil {
@@ -166,9 +200,17 @@ func unpack() {
 	fmt.Printf("Wrote %d bytes in total\n", total)
 }
 
-func replace() {
-	ctn, err := bnk.Open(filePath)
+func replace(isSoundBank bool) {
+	var ctn wwise.Container
+	var err error
+
+	if isSoundBank {
+		ctn, err = bnk.Open(filePath)
+	} else { // Input is file package
+		ctn, err = pck.Open(filePath)
+	}
 	defer ctn.Close()
+
 	if err != nil {
 		log.Fatalln("Could not parse .bnk or .pck file:", err)
 	}
@@ -249,12 +291,13 @@ func createDirIfEmpty(path string) error {
 func main() {
 	flag.Parse()
 	verifyFlags()
+	isSoundBank := verifyInputType()
 
 	switch {
 	case shouldUnpack:
-		unpack()
+		unpack(isSoundBank)
 	case shouldReplace:
 		verifyReplaceFlags()
-		replace()
+		replace(isSoundBank)
 	}
 }
