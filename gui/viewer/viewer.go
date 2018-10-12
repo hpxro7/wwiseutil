@@ -130,6 +130,7 @@ func (wv *WwiseViewerWindow) openCtn(path string) {
 		return
 	}
 
+	wv.showFileOpenStatus(path)
 	wv.actionSave.SetEnabled(true)
 	wv.actionExport.SetEnabled(true)
 }
@@ -153,6 +154,7 @@ func (wv *WwiseViewerWindow) saveCtn(path string) {
 	outputFile, err := os.Create(path)
 	if err != nil {
 		wv.showSaveError(path, err)
+		return
 	}
 	count := wv.table.CommitReplacements()
 	ctn := wv.table.GetContainer()
@@ -160,12 +162,14 @@ func (wv *WwiseViewerWindow) saveCtn(path string) {
 	total, err := ctn.WriteTo(outputFile)
 	if err != nil {
 		wv.showSaveError(path, err)
+		return
 	}
 
 	msg := fmt.Sprintf("Successfully saved %s.\n"+
 		"%d wems have been replaced.\n"+
 		"%d bytes have been written.", path, count, total)
 	widgets.QMessageBox_Information(wv, "Save successful", msg, 0, 0)
+	wv.showFileOpenStatus(path)
 }
 
 func (wv *WwiseViewerWindow) setupReplace(toolbar *widgets.QToolBar) {
@@ -192,10 +196,12 @@ func (wv *WwiseViewerWindow) addReplacement(index int, path string) {
 	wem, err := os.Open(path)
 	if err != nil {
 		wv.showOpenError(path, err)
+		return
 	}
 	stat, err := wem.Stat()
 	if err != nil {
 		wv.showOpenError(path, err)
+		return
 	}
 	r := &wwise.ReplacementWem{wem, index, stat.Size()}
 	wv.table.AddWemReplacement(stat.Name(), r)
@@ -391,4 +397,10 @@ func (wv *WwiseViewerWindow) getSelectedRow() int {
 		return -1
 	}
 	return indexes[0].Row()
+}
+
+func (wv *WwiseViewerWindow) showFileOpenStatus(path string) {
+	msg := "%s is now open."
+	basename := filepath.Base(path)
+	wv.StatusBar().ShowMessage(fmt.Sprintf(msg, basename), 0)
 }
