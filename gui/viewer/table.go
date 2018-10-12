@@ -6,6 +6,7 @@ import (
 
 import (
 	"github.com/hpxro7/wwiseutil/bnk"
+	"github.com/hpxro7/wwiseutil/pck"
 	"github.com/hpxro7/wwiseutil/util"
 	"github.com/hpxro7/wwiseutil/wwise"
 	"github.com/therecipe/qt/core"
@@ -39,7 +40,7 @@ type WemModel struct {
 	core.QAbstractTableModel
 	bindings []*columnBinding
 
-	bnk *bnk.File
+	ctn wwise.Container
 	// A mapping from wem index to the replacement wem.
 	replacements map[int]*replacementWemWrapper
 }
@@ -53,14 +54,29 @@ func NewTable() *WemTable {
 	table.HorizontalHeader().SetSectionResizeMode(widgets.QHeaderView__Stretch)
 	table.HorizontalHeader().SetHighlightSections(false)
 
-	table.UpdateWems(nil)
+	table.LoadDefaultModel()
 
 	return table
 }
 
-func (t *WemTable) UpdateWems(file *bnk.File) {
+func (t *WemTable) LoadDefaultModel() {
 	m := newModel()
-	m.bnk = file
+	m.bindings = []*columnBinding{
+		{"Name", empty},
+		{"Replacing with", empty},
+		{"Size", empty},
+		{"File offset", empty},
+		{"Padding", empty},
+		{"Loops", empty},
+	}
+
+	t.model = m
+	t.SetModel(t.model)
+}
+
+func (t *WemTable) LoadSoundBankModel(file *bnk.File) {
+	m := newModel()
+	m.ctn = file
 	m.bindings = []*columnBinding{
 		{"Name", m.defaultOr(m.wemName)},
 		{"Replacing with", m.defaultOr(m.wemReplacement)},
@@ -74,6 +90,21 @@ func (t *WemTable) UpdateWems(file *bnk.File) {
 	t.SetModel(t.model)
 }
 
+func (t *WemTable) LoadFilePackageModel(file *pck.File) {
+	m := newModel()
+	m.ctn = file
+	m.bindings = []*columnBinding{
+		{"Name", m.defaultOr(m.wemName)},
+		{"Replacing with", m.defaultOr(m.wemReplacement)},
+		{"Size", m.defaultOr(m.wemSize)},
+		{"File offset", m.defaultOr(m.wemOffset)},
+		{"Padding", m.defaultOr(m.wemPadding)},
+	}
+
+	t.model = m
+	t.SetModel(t.model)
+}
+
 func (t *WemTable) AddWemReplacement(name string, r *wwise.ReplacementWem) {
 	t.model.replacements[r.WemIndex] = &replacementWemWrapper{name, r}
 	// Modify the entire row for that wem.
@@ -81,16 +112,21 @@ func (t *WemTable) AddWemReplacement(name string, r *wwise.ReplacementWem) {
 }
 
 func (t *WemTable) UpdateLoop(wemIndex int, r *loopWrapper) {
-	loop := bnk.LoopValue{}
-	if r.loops {
-		if r.infinity {
-			loop.Loops, loop.Value = true, 0
-		} else {
-			loop.Loops, loop.Value = true, r.value
+	switch ctn := t.model.ctn.(type) {
+	case *bnk.File:
+		loop := bnk.LoopValue{}
+		if r.loops {
+			if r.infinity {
+				loop.Loops, loop.Value = true, 0
+			} else {
+				loop.Loops, loop.Value = true, r.value
+			}
 		}
+		ctn.ReplaceLoopOf(wemIndex, loop)
+		t.refreshRow(wemIndex)
+	default:
+		return
 	}
-	t.model.bnk.ReplaceLoopOf(wemIndex, loop)
-	t.refreshRow(wemIndex)
 }
 
 // CommitReplacements commits all changes to the current in-memory audio file.
@@ -102,7 +138,7 @@ func (t *WemTable) CommitReplacements() int {
 		rs = append(rs, w.replacement)
 	}
 	count := len(rs)
-	t.model.bnk.ReplaceWems(rs...)
+	t.model.ctn.ReplaceWems(rs...)
 
 	// Clear all current replacements after committing them.
 	t.model.replacements = make(map[int]*replacementWemWrapper)
@@ -125,8 +161,8 @@ func (t *WemTable) CommitReplacements() int {
 	return count
 }
 
-func (t *WemTable) GetSoundBank() *bnk.File {
-	return t.model.bnk
+func (t *WemTable) GetContainer() wwise.Container {
+	return t.model.ctn
 }
 
 func (t *WemTable) refreshRow(row int) {
@@ -158,7 +194,7 @@ func newModel() *WemModel {
 }
 
 func (m *WemModel) defaultOr(accessor wemAccessor) wemAccessor {
-	if m.bnk == nil {
+	if m.ctn == nil {
 		return empty
 	}
 	return accessor
@@ -169,7 +205,7 @@ func empty(index int) string {
 }
 
 func (m *WemModel) wemName(index int) string {
-	return util.CanonicalWemName(index, len(m.bnk.Wems()))
+	return util.CanonicalWemName(index, len(m.ctn.Wems()))
 }
 
 func (m *WemModel) wemReplacement(index int) string {
@@ -181,39 +217,42 @@ func (m *WemModel) wemReplacement(index int) string {
 }
 
 func (m *WemModel) wemSize(index int) string {
-	return fmt.Sprintf("%d bytes", m.bnk.Wems()[index].Descriptor.Length)
+	return fmt.Sprintf("%d bytes", m.ctn.Wems()[index].Descriptor.Length)
 }
 
 func (m *WemModel) wemOffset(index int) string {
-	wems := m.bnk.Wems()
-	offsetIntoFile := wems[index].Descriptor.Offset + m.bnk.DataStart()
+	wems := m.ctn.Wems()
+	offsetIntoFile := wems[index].Descriptor.Offset + m.ctn.DataStart()
 	return fmt.Sprintf("0x%X", offsetIntoFile)
 }
 
 func (m *WemModel) wemPadding(index int) string {
-	paddingSize := m.bnk.Wems()[index].Padding.Size()
+	paddingSize := m.ctn.Wems()[index].Padding.Size()
 	return fmt.Sprintf("%d bytes", paddingSize)
 }
 
 func (m *WemModel) wemLoops(index int) string {
 	str := "None"
-	loop := m.bnk.LoopOf(index)
-
-	if loop.Loops {
-		if loop.Value == bnk.InfiniteLoops {
-			str = "Infinity"
-		} else {
-			str = fmt.Sprintf("%d times", loop.Value)
+	switch ctn := m.ctn.(type) {
+	case *bnk.File:
+		loop := ctn.LoopOf(index)
+		if loop.Loops {
+			if loop.Value == bnk.InfiniteLoops {
+				str = "Infinity"
+			} else {
+				str = fmt.Sprintf("%d times", loop.Value)
+			}
 		}
 	}
+
 	return str
 }
 
 func (m *WemModel) rowCount(parent *core.QModelIndex) int {
-	if m.bnk == nil {
+	if m.ctn == nil {
 		return 0
 	}
-	return m.bnk.IndexSection.WemCount
+	return len(m.ctn.Wems())
 }
 
 func (m *WemModel) columnCount(parent *core.QModelIndex) int {
@@ -222,8 +261,8 @@ func (m *WemModel) columnCount(parent *core.QModelIndex) int {
 
 func (m *WemModel) data(index *core.QModelIndex,
 	role int) *core.QVariant {
-	if !index.IsValid() || m.bnk == nil || len(m.bnk.Wems()) == 0 ||
-		index.Row() >= len(m.bnk.Wems()) ||
+	if !index.IsValid() || m.ctn == nil || len(m.ctn.Wems()) == 0 ||
+		index.Row() >= len(m.ctn.Wems()) ||
 		role != int(core.Qt__DisplayRole) {
 		return core.NewQVariant()
 	}

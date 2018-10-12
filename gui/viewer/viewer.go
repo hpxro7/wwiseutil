@@ -1,6 +1,7 @@
 package viewer
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +12,7 @@ import (
 
 import (
 	"github.com/hpxro7/wwiseutil/bnk"
+	"github.com/hpxro7/wwiseutil/pck"
 	"github.com/hpxro7/wwiseutil/util"
 	"github.com/hpxro7/wwiseutil/wwise"
 	"github.com/therecipe/qt/core"
@@ -24,13 +26,20 @@ const (
 )
 
 var supportedFileFilters = strings.Join([]string{
+	"Wwise Containers (*.bnk *.nbnk *.pck *.npck)",
 	"SoundBank files (*.bnk *.nbnk)",
+	"File Packages (*.pck *.npck)",
+}, ";;")
+
+var saveBnkFileFilters = strings.Join([]string{
+	"MHW SoundBank file (*.nbnk)",
+	"SoundBank file (*.bnk)",
 	"All files (*.*)",
 }, ";;")
 
-var saveFileFilters = strings.Join([]string{
-	"MHW SoundBank file (*.nbnk)",
-	"SoundBank file (*.bnk)",
+var savePckFileFilters = strings.Join([]string{
+	"MHW File Package file (*.npck)",
+	"File Package (*.pck)",
 	"All files (*.*)",
 }, ";;")
 
@@ -51,8 +60,8 @@ type WwiseViewerWindow struct {
 	checkboxInfinity *widgets.QCheckBox
 	lineEditLoop     *widgets.QLineEdit
 
-	table          *WemTable
-	selectionIndex int
+	table               *WemTable
+	currSaveFileFilters string
 }
 
 func New() *WwiseViewerWindow {
@@ -75,7 +84,6 @@ func New() *WwiseViewerWindow {
 	wv.AddToolBar2(wv.loopToolBar)
 
 	wv.table = NewTable()
-	wv.selectionIndex = -1
 	wv.table.ConnectSelectionChanged(wv.onWemSelected)
 	wv.SetCentralWidget(wv.table)
 
@@ -91,20 +99,37 @@ func (wv *WwiseViewerWindow) setupOpen(toolbar *widgets.QToolBar) {
 		path := widgets.QFileDialog_GetOpenFileName(
 			wv, "Open file", home, supportedFileFilters, "", 0)
 		if path != "" {
-			wv.openBnk(path)
+			wv.openCtn(path)
 			wv.clearLoopValues()
 		}
 	})
 	toolbar.QWidget.AddAction(wv.actionOpen)
 }
 
-func (wv *WwiseViewerWindow) openBnk(path string) {
-	bnk, err := bnk.Open(path)
-	if err != nil {
-		wv.showOpenError(path, err)
+func (wv *WwiseViewerWindow) openCtn(path string) {
+	switch t, ext := util.GetFileType(path); t {
+	case util.SoundBankFileType:
+		bnk, err := bnk.Open(path)
+		if err != nil {
+			wv.showOpenError(path, err)
+			return
+		}
+		wv.currSaveFileFilters = saveBnkFileFilters
+		wv.table.LoadSoundBankModel(bnk)
+	case util.FilePackageFileType:
+		pck, err := pck.Open(path)
+		if err != nil {
+			wv.showOpenError(path, err)
+			return
+		}
+		wv.currSaveFileFilters = savePckFileFilters
+		wv.table.LoadFilePackageModel(pck)
+	default:
+		msg := fmt.Sprintf("%s(%s) is not a supported file format", path, ext)
+		wv.showOpenError(path, errors.New(msg))
 		return
 	}
-	wv.table.UpdateWems(bnk)
+
 	wv.actionSave.SetEnabled(true)
 	wv.actionExport.SetEnabled(true)
 }
@@ -116,23 +141,23 @@ func (wv *WwiseViewerWindow) setupSave(toolbar *widgets.QToolBar) {
 	wv.actionSave.ConnectTriggered(func(checked bool) {
 		home := util.UserHome()
 		path := widgets.QFileDialog_GetSaveFileName(
-			wv, "Save file", home, saveFileFilters, "", 0)
+			wv, "Save file", home, wv.currSaveFileFilters, "", 0)
 		if path != "" {
-			wv.saveBnk(path)
+			wv.saveCtn(path)
 		}
 	})
 	toolbar.QWidget.AddAction(wv.actionSave)
 }
 
-func (wv *WwiseViewerWindow) saveBnk(path string) {
+func (wv *WwiseViewerWindow) saveCtn(path string) {
 	outputFile, err := os.Create(path)
 	if err != nil {
 		wv.showSaveError(path, err)
 	}
 	count := wv.table.CommitReplacements()
-	bnk := wv.table.GetSoundBank()
+	ctn := wv.table.GetContainer()
 
-	total, err := bnk.WriteTo(outputFile)
+	total, err := ctn.WriteTo(outputFile)
 	if err != nil {
 		wv.showSaveError(path, err)
 	}
@@ -188,7 +213,7 @@ func (wv *WwiseViewerWindow) setupExport(toolbar *widgets.QToolBar) {
 		dir := widgets.QFileDialog_GetExistingDirectory(
 			wv, "Choose directory to unpack into", home, opts)
 		if dir != "" {
-			wv.exportBnk(dir)
+			wv.exportCtn(dir)
 		}
 	})
 	toolbar.QWidget.AddAction(wv.actionExport)
@@ -263,8 +288,7 @@ func (wv *WwiseViewerWindow) clearLoopValues() {
 	wv.loopToolBar.SetEnabled(false)
 }
 
-func (wv *WwiseViewerWindow) setLoopValues(wemIndex int) {
-	b := wv.table.GetSoundBank()
+func (wv *WwiseViewerWindow) setLoopValues(b *bnk.File, wemIndex int) {
 	loop := b.LoopOf(wemIndex)
 	if loop.Loops {
 		if loop.Value == bnk.InfiniteLoops {
@@ -284,11 +308,11 @@ func (wv *WwiseViewerWindow) setLoopValues(wemIndex int) {
 	}
 }
 
-func (wv *WwiseViewerWindow) exportBnk(dir string) {
+func (wv *WwiseViewerWindow) exportCtn(dir string) {
 	total := int64(0)
-	bnk := wv.table.GetSoundBank()
-	for i, wem := range bnk.Wems() {
-		filename := util.CanonicalWemName(i, len(bnk.Wems()))
+	ctn := wv.table.GetContainer()
+	for i, wem := range ctn.Wems() {
+		filename := util.CanonicalWemName(i, len(ctn.Wems()))
 		f, err := os.Create(filepath.Join(dir, filename))
 		if err != nil {
 			wv.showExportError(filename, dir, err)
@@ -302,7 +326,7 @@ func (wv *WwiseViewerWindow) exportBnk(dir string) {
 		total += n
 	}
 
-	count := len(bnk.Wems())
+	count := len(ctn.Wems())
 	msg := fmt.Sprintf("Successfully exported wems to %s.\n"+
 		"%d wems have been exported.\n"+
 		"%d bytes have been written.", dir, count, total)
@@ -328,8 +352,12 @@ func (wv *WwiseViewerWindow) onWemSelected(selected *core.QItemSelection,
 	wemIndex := wv.getSelectedRow()
 
 	wv.actionReplace.SetEnabled(true)
-	wv.loopToolBar.SetEnabled(true)
-	wv.setLoopValues(wemIndex)
+
+	switch bnk := wv.table.GetContainer().(type) {
+	case *bnk.File:
+		wv.loopToolBar.SetEnabled(true)
+		wv.setLoopValues(bnk, wemIndex)
+	}
 }
 
 func (wv *WwiseViewerWindow) showExportError(filename string, path string,
