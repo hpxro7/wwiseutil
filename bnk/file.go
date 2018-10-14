@@ -270,11 +270,11 @@ func (bnk *File) String() string {
 		b.WriteString(sec.String())
 	}
 
-	tableParams := []string{"%-7", "%-15", "%-15", "%-8", "%-12", "\n"}
+	tableParams := []string{"%-7", "%-15", "%-15", "%-15", "%-8", "%-12", "\n"}
 	titleFmt := strings.Join(tableParams, "s|")
 	wemFmt := strings.Join(tableParams, "d|")
 	title := fmt.Sprintf(titleFmt,
-		"Index", "Offset", "Length", "Padding", "Loop (0=Inf)")
+		"Index", "Id", "Offset", "Length", "Padding", "Loop (0=Inf)")
 	fmt.Fprint(b, title)
 	fmt.Fprintln(b, strings.Repeat("-", len(title)-1))
 
@@ -286,8 +286,8 @@ func (bnk *File) String() string {
 			loop = int(l.Value)
 		}
 
-		fmt.Fprintf(b, wemFmt, i+1, desc.Offset, desc.Length, wem.Padding.Size(),
-			loop)
+		fmt.Fprintf(b, wemFmt, i+1, desc.WemId, desc.Offset, desc.Length,
+			wem.Padding.Size(), loop)
 	}
 
 	return b.String()
