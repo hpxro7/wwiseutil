@@ -8,7 +8,7 @@
 
 * __loop editing__: Currently, loop editing of basic sound effects is supported. Support for different looping mechanisms will be supported in the future. Loop editing is currently only supported in the GUI.
 
-![screenshot](screenshot.PNG?raw=true)
+![screenshot](assets/screenshot.PNG?raw=true)
 
 ## Resources
 * [Command Line Usage](https://github.com/hpxro7/wwiseutil/wiki/Command-Line-Usage)
