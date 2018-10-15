@@ -38,5 +38,5 @@ func (r *InfiniteReaderAt) ReadAt(p []byte, off int64) (int, error) {
 	for i, _ := range p {
 		p[i] = r.Value
 	}
-	return 1, nil
+	return len(p), nil
 }
