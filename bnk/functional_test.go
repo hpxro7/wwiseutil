@@ -3,6 +3,7 @@ package bnk
 
 // Large system tests for the bnk package.
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -74,72 +75,25 @@ func TestUnchangedWriteFileTwiceIsEqual(t *testing.T) {
 func TestReplaceFirstWemWithSmaller(t *testing.T) {
 	util.SkipIfShort(t)
 
-	bnk, err := Open(filepath.Join(testDir, complexSoundBank))
-	if err != nil {
-		t.Error(err)
-	}
 	wem, err := os.Open(filepath.Join(testDir, smallerWem))
 	if err != nil {
 		t.Error(err)
 	}
 	stat, _ := wem.Stat()
-	bnk.ReplaceWems(&wwise.ReplacementWem{wem, 0, stat.Size()})
-
-	expect, err := os.Open(filepath.Join(testDir, "0_replaced_with_smaller.bnk"))
-	if err != nil {
-		t.Error(err)
-	}
-
-	wwise.AssertContainerEqualToFile(t, expect, bnk)
-}
-
-func TestReplaceFirstWemWithLargerTwice(t *testing.T) {
-	util.SkipIfShort(t)
-
-	bnk, err := Open(filepath.Join(testDir, complexSoundBank))
-	if err != nil {
-		t.Error(err)
-	}
-	wem, err := os.Open(filepath.Join(testDir, largerWem))
-	if err != nil {
-		t.Error(err)
-	}
-	stat, _ := wem.Stat()
-	bnk.ReplaceWems(&wwise.ReplacementWem{wem, 0, stat.Size()})
-
-	expect, err := os.Open(filepath.Join(testDir, "0_replaced_with_larger.bnk"))
-	if err != nil {
-		t.Error(err)
-	}
-	wwise.AssertContainerEqualToFile(t, expect, bnk)
-
-	expect, err = os.Open(filepath.Join(testDir, "0_replaced_with_larger.bnk"))
-	if err != nil {
-		t.Error(err)
-	}
-	wwise.AssertContainerEqualToFile(t, expect, bnk)
+	rs := []*wwise.ReplacementWem{&wwise.ReplacementWem{wem, 0, stat.Size()}}
+	assertReplacedFileCorrectness(t, complexSoundBank, rs...)
 }
 
 func TestReplaceFirstWemWithLarger(t *testing.T) {
 	util.SkipIfShort(t)
 
-	bnk, err := Open(filepath.Join(testDir, complexSoundBank))
-	if err != nil {
-		t.Error(err)
-	}
 	wem, err := os.Open(filepath.Join(testDir, largerWem))
 	if err != nil {
 		t.Error(err)
 	}
 	stat, _ := wem.Stat()
-	bnk.ReplaceWems(&wwise.ReplacementWem{wem, 0, stat.Size()})
-
-	expect, err := os.Open(filepath.Join(testDir, "0_replaced_with_larger.bnk"))
-	if err != nil {
-		t.Error(err)
-	}
-
-	wwise.AssertContainerEqualToFile(t, expect, bnk)
+	rs := []*wwise.ReplacementWem{&wwise.ReplacementWem{wem, 0, stat.Size()}}
+	assertReplacedFileCorrectness(t, complexSoundBank, rs...)
 }
 
 func TestReplaceLoopOfCases(t *testing.T) {
@@ -181,4 +135,55 @@ func TestReplaceLoopOfCases(t *testing.T) {
 
 		wwise.AssertContainerEqualToFile(t, expect, bnk)
 	}
+}
+
+func rereadFile(t *testing.T, org *File) *File {
+	orgBytes := new(bytes.Buffer)
+	_, err := org.WriteTo(orgBytes)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+	bs := bytes.NewReader(orgBytes.Bytes())
+
+	ctn, err := NewFile(bs)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	return ctn
+}
+
+func assertReplacedFileCorrectness(t *testing.T, bnkPath string,
+	rs ...*wwise.ReplacementWem) {
+	org, err := Open(filepath.Join(testDir, bnkPath))
+	if err != nil {
+		t.Error(err)
+	}
+
+	replaced, err := Open(filepath.Join(testDir, bnkPath))
+	if err != nil {
+		t.Error(err)
+	}
+	replaced.ReplaceWems(rs...)
+	replaced = rereadFile(t, replaced)
+
+	wwise.AssertReplacementOffsetsConsistent(t, org, replaced, rs...)
+	actualLength := int64(0)
+	for i, wem := range replaced.Wems() {
+		actualLength += int64(wem.Descriptor.Length) + wem.Padding.Size()
+		// Check that offsets are byte aligned.
+		offset := wem.Descriptor.Offset
+		if offset%wemAlignmentBytes != 0 {
+			t.Errorf("The wem at index %d has an offset of 0x%X, which is not "+
+				"byte aligned by %d", i, offset, wemAlignmentBytes)
+		}
+	}
+	expectedLength := int64(replaced.DataSection.Header.Length)
+	if expectedLength != actualLength {
+		t.Errorf("The total size of wems is %d bytes, but the data section header "+
+			"only reports %d bytes", actualLength, expectedLength)
+	}
+
 }

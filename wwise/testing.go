@@ -62,3 +62,40 @@ func AssertContainerEqualToFile(t *testing.T, f *os.File, pck Container) {
 		t.Error("The two files have the same size but are not equal.")
 	}
 }
+
+func AssertReplacementOffsetsConsistent(t *testing.T, org Container,
+	ctn Container, rs ...*ReplacementWem) {
+	var expectedLengths []int64
+	replacementFrom := make(map[int]*ReplacementWem)
+
+	for _, r := range rs {
+		replacementFrom[r.WemIndex] = r
+	}
+
+	for i, wem := range org.Wems() {
+		r, replacing := replacementFrom[i]
+		if replacing {
+			expectedLengths = append(expectedLengths, r.Length)
+		} else {
+			expectedLengths = append(expectedLengths, int64(wem.Descriptor.Length))
+		}
+	}
+
+	expectedOffset := int64(org.DataStart() + ctn.Wems()[0].Descriptor.Offset)
+
+	for i, wem := range ctn.Wems() {
+		expectedLength := expectedLengths[i]
+		newLength := int64(wem.Descriptor.Length)
+		if expectedLength != newLength {
+			t.Errorf("Wem at index %d was expected to have length %d bytes "+
+				"but instead was %d bytes", i, expectedLength, newLength)
+		}
+
+		actualOffset := int64(org.DataStart() + wem.Descriptor.Offset)
+		if expectedOffset != actualOffset {
+			t.Errorf("Wem at index %d was expected to have offset at 0x%X "+
+				"but instead was 0x%X", i, expectedOffset, actualOffset)
+		}
+		expectedOffset += int64(newLength) + wem.Padding.Size()
+	}
+}
