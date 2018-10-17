@@ -24,10 +24,6 @@ const (
 	loop2SoundBank        = "loop_2.bnk"
 	loop23SoundBank       = "loop_23.bnk"
 	loopInfinitySoundBank = "loop_infinity.bnk"
-
-	// The number of bytes to add or subtract from when testing replacing larger
-	// or smaller wems
-	wemDifference = 200
 )
 
 func TestSimpleUnchangedFileIsEqual(t *testing.T) {
@@ -71,34 +67,22 @@ func TestUnchangedWriteFileTwiceIsEqual(t *testing.T) {
 	wwise.AssertContainerEqualToFile(t, f, bnk)
 }
 
-func TestReplaceFirstWemWithSmaller(t *testing.T) {
+func TestReplaceWemCases(t *testing.T) {
 	util.SkipIfShort(t)
 
-	org, err := Open(filepath.Join(testDir, complexSoundBank))
-	if err != nil {
-		t.Error(err)
-		t.FailNow()
+	for _, c := range wwise.ReplacementTestCases {
+		org, err := Open(filepath.Join(testDir, complexSoundBank))
+		if err != nil {
+			t.Error(c.Name+"failed: ", err)
+			t.FailNow()
+		}
+
+		rs := c.Test.Expand(org)
+		failed := assertReplacedFileCorrectness(t, complexSoundBank, rs...)
+		if failed {
+			t.Error("The", c.Name, "test case has failed.\n")
+		}
 	}
-	wemSize := int64(org.Wems()[0].Descriptor.Length) - wemDifference
-	wem := util.NewConstantReader(wemSize)
-
-	rs := []*wwise.ReplacementWem{&wwise.ReplacementWem{wem, 0, wemSize}}
-	assertReplacedFileCorrectness(t, complexSoundBank, rs...)
-}
-
-func TestReplaceFirstWemWithLarger(t *testing.T) {
-	util.SkipIfShort(t)
-
-	org, err := Open(filepath.Join(testDir, complexSoundBank))
-	if err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
-	wemSize := int64(org.Wems()[0].Descriptor.Length) + wemDifference
-	wem := util.NewConstantReader(wemSize)
-
-	rs := []*wwise.ReplacementWem{&wwise.ReplacementWem{wem, 0, wemSize}}
-	assertReplacedFileCorrectness(t, complexSoundBank, rs...)
 }
 
 func TestReplaceLoopOfCases(t *testing.T) {
@@ -161,36 +145,39 @@ func rereadFile(t *testing.T, org *File) *File {
 }
 
 func assertReplacedFileCorrectness(t *testing.T, bnkPath string,
-	rs ...*wwise.ReplacementWem) {
+	rs ...*wwise.ReplacementWem) (failed bool) {
 	org, err := Open(filepath.Join(testDir, bnkPath))
 	if err != nil {
 		t.Error(err)
-		t.FailNow()
+		return true
 	}
 
 	replaced, err := Open(filepath.Join(testDir, bnkPath))
 	if err != nil {
 		t.Error(err)
-		t.FailNow()
+		return true
 	}
 	replaced.ReplaceWems(rs...)
-	replaced = rereadFile(t, replaced)
+	reread := rereadFile(t, replaced)
 
-	wwise.AssertReplacementOffsetsConsistent(t, org, replaced, rs...)
+	failed =
+		wwise.AssertReplacementsConsistent(t, org, replaced, reread, rs...)
 	actualLength := int64(0)
-	for i, wem := range replaced.Wems() {
+	for i, wem := range reread.Wems() {
 		actualLength += int64(wem.Descriptor.Length) + wem.Padding.Size()
 		// Check that offsets are byte aligned.
 		offset := wem.Descriptor.Offset
 		if offset%wemAlignmentBytes != 0 {
 			t.Errorf("The wem at index %d has an offset of 0x%X, which is not "+
 				"byte aligned by %d", i, offset, wemAlignmentBytes)
+			failed = true
 		}
 	}
-	expectedLength := int64(replaced.DataSection.Header.Length)
+	expectedLength := int64(reread.DataSection.Header.Length)
 	if expectedLength != actualLength {
 		t.Errorf("The total size of wems is %d bytes, but the data section header "+
 			"only reports %d bytes", actualLength, expectedLength)
+		failed = true
 	}
-
+	return
 }
