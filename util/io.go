@@ -40,3 +40,9 @@ func (r *InfiniteReaderAt) ReadAt(p []byte, off int64) (int, error) {
 	}
 	return len(p), nil
 }
+
+// NewConstantReader returns a ReaderAt that emits a fixed sized stream of a
+// constant byte value.
+func NewConstantReader(size int64) io.ReaderAt {
+	return io.NewSectionReader(&InfiniteReaderAt{'A'}, 0, size)
+}

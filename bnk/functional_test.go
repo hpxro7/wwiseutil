@@ -25,10 +25,9 @@ const (
 	loop23SoundBank       = "loop_23.bnk"
 	loopInfinitySoundBank = "loop_infinity.bnk"
 
-	// This wem is smaller than the wem at index 0 of simpleSoundBank
-	smallerWem = "small.wem"
-	// This wem is larger than the wem at index 0 of simpleSoundBank
-	largerWem = "large.wem"
+	// The number of bytes to add or subtract from when testing replacing larger
+	// or smaller wems
+	wemDifference = 200
 )
 
 func TestSimpleUnchangedFileIsEqual(t *testing.T) {
@@ -75,24 +74,30 @@ func TestUnchangedWriteFileTwiceIsEqual(t *testing.T) {
 func TestReplaceFirstWemWithSmaller(t *testing.T) {
 	util.SkipIfShort(t)
 
-	wem, err := os.Open(filepath.Join(testDir, smallerWem))
+	org, err := Open(filepath.Join(testDir, complexSoundBank))
 	if err != nil {
 		t.Error(err)
+		t.FailNow()
 	}
-	stat, _ := wem.Stat()
-	rs := []*wwise.ReplacementWem{&wwise.ReplacementWem{wem, 0, stat.Size()}}
+	wemSize := int64(org.Wems()[0].Descriptor.Length) - wemDifference
+	wem := util.NewConstantReader(wemSize)
+
+	rs := []*wwise.ReplacementWem{&wwise.ReplacementWem{wem, 0, wemSize}}
 	assertReplacedFileCorrectness(t, complexSoundBank, rs...)
 }
 
 func TestReplaceFirstWemWithLarger(t *testing.T) {
 	util.SkipIfShort(t)
 
-	wem, err := os.Open(filepath.Join(testDir, largerWem))
+	org, err := Open(filepath.Join(testDir, complexSoundBank))
 	if err != nil {
 		t.Error(err)
+		t.FailNow()
 	}
-	stat, _ := wem.Stat()
-	rs := []*wwise.ReplacementWem{&wwise.ReplacementWem{wem, 0, stat.Size()}}
+	wemSize := int64(org.Wems()[0].Descriptor.Length) + wemDifference
+	wem := util.NewConstantReader(wemSize)
+
+	rs := []*wwise.ReplacementWem{&wwise.ReplacementWem{wem, 0, wemSize}}
 	assertReplacedFileCorrectness(t, complexSoundBank, rs...)
 }
 
@@ -160,11 +165,13 @@ func assertReplacedFileCorrectness(t *testing.T, bnkPath string,
 	org, err := Open(filepath.Join(testDir, bnkPath))
 	if err != nil {
 		t.Error(err)
+		t.FailNow()
 	}
 
 	replaced, err := Open(filepath.Join(testDir, bnkPath))
 	if err != nil {
 		t.Error(err)
+		t.FailNow()
 	}
 	replaced.ReplaceWems(rs...)
 	replaced = rereadFile(t, replaced)
