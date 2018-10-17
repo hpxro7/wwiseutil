@@ -172,7 +172,13 @@ func assertReplacedFileCorrectness(t *testing.T, bnkPath string,
 				"byte aligned by %d", i, offset, wemAlignmentBytes)
 			failed = true
 		}
+		if wem.Padding.Size() >= wemAlignmentBytes {
+			t.Errorf("The wem at index %d has %d bytes of padding. This is more "+
+				"than the byte alignment value", i, wem.Padding.Size())
+			failed = true
+		}
 	}
+
 	expectedLength := int64(reread.DataSection.Header.Length)
 	if expectedLength != actualLength {
 		t.Errorf("The total size of wems is %d bytes, but the data section header "+

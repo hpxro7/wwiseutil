@@ -83,8 +83,8 @@ func ReplaceWems(ctn Container, alignment int64, rs ...*ReplacementWem) int64 {
 	// opposed to O(n^2), requires that the replacements happen in the order
 	// that their wem will appear in the file; sorting them by index achives this.
 	sort.Sort(ByWemIndex{rs})
-	// Surplus is the number of bytes a wem offset needs to be increased by,
-	// because of a increase in a previous wem's size.
+	// Surplus is the number of bytes a wem offset needs to be increased by or
+	// decreased by because of a change in a previous wem's size.
 	surplus := int64(0)
 	for i, r := range rs {
 		wem := ctn.Wems()[r.WemIndex]
@@ -93,21 +93,18 @@ func ReplaceWems(ctn Container, alignment int64, rs ...*ReplacementWem) int64 {
 		wem.Reader = util.NewResettingReader(r.Wem, 0, newLength)
 
 		padding := wem.Padding.Size()
-		if newLength > oldLength {
-			surplus += newLength - oldLength
+		if newLength != oldLength {
 			if alignment != 0 {
 				// Compute the new amount of padding needed to align the next offset
 				// (true end of this wem section) with alignment bytes.
 				padding =
 					(alignment - (int64(wem.Descriptor.Offset)+newLength)%alignment)
 			}
+			// Update the new surplus after changing this wem.
 			// Subsequent wem's will need to have their offsets aligned with the end
 			// of our new wem's padding. The offset difference will need to include
 			// the difference in padding between the old wem and the replacement wem.
-			surplus += padding - wem.Padding.Size()
-		} else { // newLength <= oldLength
-			// Pad from the end of the new wem to the offset of the next wem.
-			padding += int64(oldLength - newLength)
+			surplus += (newLength - oldLength) + (padding - wem.Padding.Size())
 		}
 
 		// Update the length of the descriptor. This, by pointer dereference,
@@ -116,11 +113,11 @@ func ReplaceWems(ctn Container, alignment int64, rs ...*ReplacementWem) int64 {
 		wem.Descriptor.Length = uint32(newLength)
 		wem.Padding = util.NewResettingReader(&util.InfiniteReaderAt{0}, 0, padding)
 
-		if surplus > 0 {
+		if surplus != 0 {
 			// Shift the offsets for the next wems, since the current wem is going to
-			// take up more space than it originally was. Do this up to and including
-			// the next replacement wem, if any. After that point, we'll need to
-			// re-evaluate our surplus.
+			// take up more or less space than it originally was. Do this up to and
+			// including the next replacement wem, if any. After that point, we'll need
+			// to re-evaluate our surplus.
 			for wi := r.WemIndex + 1; wi <= len(ctn.Wems())-1; wi++ {
 				wem := ctn.Wems()[wi]
 				wem.Descriptor.Offset += uint32(surplus)

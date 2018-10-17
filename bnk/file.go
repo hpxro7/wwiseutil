@@ -154,7 +154,7 @@ func (bnk *File) Wems() []*wwise.Wem {
 func (bnk *File) ReplaceWems(rs ...*wwise.ReplacementWem) {
 	surplus := wwise.ReplaceWems(bnk, wemAlignmentBytes, rs...)
 
-	if surplus > 0 {
+	if surplus != 0 {
 		// Update the length of the DATA header to account for the change in size.
 		bnk.DataSection.Header.Length += uint32(surplus)
 	}
