@@ -46,6 +46,27 @@ var ReplacementTestCases = []replacementTestCase{
 	{"ReplaceLastWemWithLarger", replacementTest{
 		{UseLast: true, Larger: true},
 	}},
+	{"ReplaceConsecutiveWemsWithLarger", replacementTest{
+		{Index: 2, Larger: true},
+		{Index: 3, Larger: true},
+		{Index: 4, Larger: true},
+		{Index: 5, Larger: true},
+	}},
+	{"ReplaceConsecutiveWemsWithSmaller", replacementTest{
+		{Index: 2, Larger: false},
+		{Index: 3, Larger: false},
+		{Index: 4, Larger: false},
+		{Index: 5, Larger: false},
+	}},
+	{"ReplaceMixedLargeSmallWemsWithGaps", replacementTest{
+		{Index: 0, Larger: false},
+		{Index: 5, Larger: true},
+		{Index: 11, Larger: true},
+		{Index: 20, Larger: false},
+		{Index: 21, Larger: false},
+		{Index: 30, Larger: true},
+		{UseLast: true, Larger: false},
+	}},
 }
 
 func AssertContainerEqualToFile(t *testing.T, f *os.File, pck Container) {
