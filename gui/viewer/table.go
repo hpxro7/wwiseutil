@@ -64,6 +64,7 @@ func (t *WemTable) LoadDefaultModel() {
 	m.bindings = []*columnBinding{
 		{"Name", empty},
 		{"Replacing with", empty},
+		{"Id", empty},
 		{"Size", empty},
 		{"File offset", empty},
 		{"Padding", empty},
@@ -80,6 +81,7 @@ func (t *WemTable) LoadSoundBankModel(file *bnk.File) {
 	m.bindings = []*columnBinding{
 		{"Name", m.defaultOr(m.wemName)},
 		{"Replacing with", m.defaultOr(m.wemReplacement)},
+		{"Id", m.defaultOr(m.wemId)},
 		{"Size", m.defaultOr(m.wemSize)},
 		{"File offset", m.defaultOr(m.wemOffset)},
 		{"Padding", m.defaultOr(m.wemPadding)},
@@ -96,6 +98,7 @@ func (t *WemTable) LoadFilePackageModel(file *pck.File) {
 	m.bindings = []*columnBinding{
 		{"Name", m.defaultOr(m.wemName)},
 		{"Replacing with", m.defaultOr(m.wemReplacement)},
+		{"Id", m.defaultOr(m.wemId)},
 		{"Size", m.defaultOr(m.wemSize)},
 		{"File offset", m.defaultOr(m.wemOffset)},
 		{"Padding", m.defaultOr(m.wemPadding)},
@@ -214,6 +217,10 @@ func (m *WemModel) wemReplacement(index int) string {
 		return ""
 	}
 	return r.name
+}
+
+func (m *WemModel) wemId(index int) string {
+	return fmt.Sprintf("%d", m.ctn.Wems()[index].Descriptor.WemId)
 }
 
 func (m *WemModel) wemSize(index int) string {
